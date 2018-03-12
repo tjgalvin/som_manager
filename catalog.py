@@ -583,7 +583,8 @@ class Pink(Base):
         out+= f'Contains {len(self.binary.sources)} sources\n'
         out+= f'Channels are {self.binary.channels}\n'
         if self.trained:
-            out+= f'SOM is trained {self.SOM}'
+            out+= f'SOM is trained: {self.SOM_path}\n'
+            out+= f'SOM weight hash is {self.SOM_hash}\n'
         else:
             out+= 'SOM is not trained'
 
@@ -616,6 +617,14 @@ class Pink(Base):
             self.pink_args = {'som-width':10,
                               'som-height':10}
 
+    def update_pink_args(self, **kwargs):
+        '''Helper function to update pink arguments that may not have been included
+        when creating the class instance
+    
+        Use the kwargs and simply update the pink_args attribute
+        '''
+        self.pink_args.update(kwargs)
+
     def train(self):
         '''Train the SOM with PINK using the supplied options and Binary file
         '''
@@ -623,19 +632,21 @@ class Pink(Base):
             print('The SOM has been trained already')
             return
         
+        if not os.path.exists(self.binary.binary_path):
+            raise ValueError(f'Unable to locate {self.binary.binary_path}')
+        
+        if self.binary.binary_hash != get_hash(self.binary.binary_path):
+            raise ValueError(f'The hash checked failed for {self.binary.binary_path}')
+
         pink_avail = True if shutil.which('Pink') is not None else False
         exec_str  = f'Pink --train {self.binary.binary_path} {self.SOM_path} '
         exec_str += ' '.join(f'--{k}={v}' for k,v in self.pink_args.items())
 
-
-        print(exec_str)
-
         if pink_avail:
             self.exec_str = exec_str
             self.pink_process = subprocess.run(self.exec_str.split())
-
-            print('\nFINISHEDDDD')
-            print(self.pink_process.stdout.decode('utf-8'))
+            self.trained = True
+            self.SOM_hash = get_hash(self.SOM_path)
         else:
             print('PINK can not be found on this system...')
             
@@ -647,12 +658,16 @@ if __name__ == '__main__':
         print('Printing the loaded binary...')
         print(load_binary)
 
-        pink = Pink(load_binary)       
+        pink = Pink(load_binary, pink_args={'som-width':6,
+                                            'som-height':6})       
 
         print(pink)
         print('\n')
 
         pink.train()
+
+        print('\n')
+        print(pink)
 
     elif '-c' in sys.argv:
         cat = Catalog(catalog='./first_14dec17.fits.gz')
