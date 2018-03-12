@@ -1,5 +1,6 @@
 '''A manager class to accept a catalogue and generate the sources
 '''
+import io
 import os
 import sys
 import json
@@ -57,7 +58,32 @@ def make_dir(d):
     except OSError as e:
         pass
 
-class Source(object):
+class Base(object):
+    '''Base class to inherit from. 
+    '''
+    def save(self, out_path='default.binary'):
+        '''A function to save this Binary instance to disk, wrapping a reference to 
+        the sources, channels that produced the PINK binary, and making a hash to
+        '''
+        with open(out_path, 'wb') as out_file:
+            pickle.dump(self.__dict__, out_file)
+
+    @classmethod
+    def loader(cls, in_path):
+        '''Load in a saved reference of the class pickle produced by save()
+
+        in_path - str
+              Path to the saved Binary class
+        '''
+        with open(in_path, 'rb') as in_file:
+            attributes = pickle.load(in_file)
+
+        obj = cls.__new__(cls)
+        obj.__dict__.update(attributes)
+
+        return obj
+
+class Source(Base):
     '''Object class to handle a single object from a catalogue, downloading
     images, saving images, reprojecting them onto a common grid, and dumping
     them into a binary file
@@ -341,7 +367,7 @@ class Source(object):
             ax.set(title=k)
             fig.show()
 
-class Binary(object):
+class Binary(Base):
     '''Wrap up a Binary file into a class to `attach` metadata associated 
     with it, including the valid sources, the channels and their order, 
     a hash of the binary, the path and anything else I can think of
@@ -375,29 +401,7 @@ class Binary(object):
         self.binary_hash = get_hash(self.binary_path)
         self.channels = channels
 
-    def save(self, out_path='default.binary'):
-        '''A function to save this Binary instance to disk, wrapping a reference to 
-        the sources, channels that produced the PINK binary, and making a hash to
-        '''
-        with open(out_path, 'wb') as out_file:
-            pickle.dump(self.__dict__, out_file)
-
-    @classmethod
-    def loader(cls, in_path):
-        '''Load in a saved reference of the class pickle produced by save()
-
-        in_path - str
-              Path to the saved Binary class
-        '''
-        with open(in_path, 'rb') as in_file:
-            attributes = pickle.load(in_file)
-
-        obj = cls.__new__(cls)
-        obj.__dict__.update(attributes)
-
-        return obj
-
-class Catalog(object):
+class Catalog(Base):
     '''A class object to manage a catalogue and spawn corresponding Source
     classes
     '''
@@ -564,7 +568,7 @@ class Catalog(object):
 
         return Binary(binary_out, self.valid_sources, channels=channels)
 
-class Pink(object):
+class Pink(Base):
     '''Manage a single Pink training session, including the arguments used to run
     it, the binary file used to train it, and interacting with the results afterwards
     '''
