@@ -635,7 +635,7 @@ class Pink(Base):
             self.pink_process = subprocess.run(self.exec_str.split())
 
             print('\nFINISHEDDDD')
-            print(self.pink_process.stdout.decode('utf-8'))
+            print(self.pink_process.stdout.decode('utf-8'), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         else:
             print('PINK can not be found on this system...')
             
