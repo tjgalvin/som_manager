@@ -9,6 +9,7 @@ import pickle
 import struct
 import hashlib
 import requests
+import subprocess
 import numpy as np
 import reproject as rp
 import astropy.units as u
@@ -581,10 +582,10 @@ class Pink(Base):
         out = f'The binary file attached: {self.binary.binary_path}\n'
         out+= f'Contains {len(self.binary.sources)} sources\n'
         out+= f'Channels are {self.binary.channels}\n'
-        if self.SOM is None:
-            out+= 'SOM is not trained'
-        else:
+        if self.trained:
             out+= f'SOM is trained {self.SOM}'
+        else:
+            out+= 'SOM is not trained'
 
         return out
 
@@ -606,7 +607,9 @@ class Pink(Base):
 
         self.trained = False
         self.binary = binary
-        self.SOM = None
+        self.SOM_path = f'{self.binary.binary_path}.Trained_SOM'
+        self.SOM_hash = ''
+        self.exec_str = ''
         if pink_args:
             self.pink_args = pink_args
         else:
@@ -621,11 +624,17 @@ class Pink(Base):
             return
         
         pink_avail = True if shutil.which('Pink') is not None else False
+        exec_str = f'Pink --train {self.binary.binary_path} {self.SOM_path} '
+        exec_str+= ' '.join(f'--{k}={v}' for k,v in self.pink_args.items())
 
-        if not pink_avail:
+        print(exec_str)
+
+        if pink_avail:
+            self.exec_str = exec_str
+            self.pink_process = subprocess.run(self.exec_str)
+        else:
             print('PINK can not be found on this system...')
-            print(self.pink_args)
-
+            
 if __name__ == '__main__':
 
     if '-p' in sys.argv:
@@ -677,6 +686,7 @@ if __name__ == '__main__':
         if a.valid:
             with open('test.dumpy', 'wb') as of:
                 a.dump(of)
+    
     else:
         print('Options:')
         print(' -s : Run test code for Source class')
