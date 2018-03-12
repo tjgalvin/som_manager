@@ -645,14 +645,8 @@ class Pink(Base):
         if pink_avail:
             self.exec_str = exec_str
             self.pink_process = subprocess.run(self.exec_str.split())
-<<<<<<< HEAD
             self.trained = True
             self.SOM_hash = get_hash(self.SOM_path)
-=======
-
-            print('\nFINISHEDDDD')
-            print(self.pink_process.stdout.decode('utf-8'), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
->>>>>>> 725afec5a263b83437e69be232d29c154f90b8ec
         else:
             print('PINK can not be found on this system...')
             
