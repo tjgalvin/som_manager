@@ -660,7 +660,7 @@ if __name__ == '__main__':
         cat.reproject_valid_sources()
         print('\n')
         binary = cat.dump_binary()
-        binary.save()
+        binary.save('default.binary')
 
         print('\n', binary)
 
