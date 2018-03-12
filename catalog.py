@@ -1,17 +1,22 @@
 '''A manager class to accept a catalogue and generate the sources
 '''
 import os
+import sys
 import json
 import glob
 import pickle
 import struct
+import hashlib
+import requests
 import numpy as np
+import reproject as rp
 import astropy.units as u
 import matplotlib.pyplot as plt
 
 from tqdm import tqdm
 # from source import Source
 from astropy.table import Table
+from astropy.io import fits as pyfits
 from astropy.coordinates import SkyCoord
 
 from dask import delayed
@@ -23,10 +28,22 @@ import warnings
 from astropy.utils.exceptions import AstropyWarning
 warnings.simplefilter('ignore', category=AstropyWarning)
 
-def get_hash(f):
+def get_hash(f, blocksize=56332):
     '''Will return the SHA1 hash of the input file
+
+    blocksize - int
+          Number of bytes to read in at once to save memory
     '''
-    return ''
+    sha1 = hashlib.sha1()
+
+    with open(f, 'rb') as in_file:
+        while True:
+            data = in_file.read(blocksize)
+            if not data:
+                break
+            sha1.update(data)
+
+    return sha1.hexdigest()
 
 def make_dir(d):
     '''Helper function to make a directory if it does not exist
@@ -333,8 +350,8 @@ class Binary(object):
         '''Return a neat printed statement of the object instance
         '''
         out = f'Binary path: {self.binary_path}\n'
-        out+= f'Number of sources {len(self.sources)}'
-        out+= f'The binary SHA1: {self.binary_hash}'
+        out+= f'Number of sources {len(self.sources)}\n'
+        out+= f'The binary SHA1: {self.binary_hash}\n'
 
         return out
 
@@ -353,9 +370,32 @@ class Binary(object):
         channels - list
             A list of the channels/surveys packed into the binary_path file
         '''
-        self.source = sources
+        self.sources = sources
         self.binary_path = binary_path
         self.binary_hash = get_hash(self.binary_path)
+        self.channels = channels
+
+    def save(self, out_path='default.binary'):
+        '''A function to save this Binary instance to disk, wrapping a reference to 
+        the sources, channels that produced the PINK binary, and making a hash to
+        '''
+        with open(out_path, 'wb') as out_file:
+            pickle.dump(self.__dict__, out_file)
+
+    @classmethod
+    def loader(cls, in_path):
+        '''Load in a saved reference of the class pickle produced by save()
+
+        in_path - str
+              Path to the saved Binary class
+        '''
+        with open(in_path, 'rb') as in_file:
+            attributes = pickle.load(in_file)
+
+        obj = cls.__new__(cls)
+        obj.__dict__.update(attributes)
+
+        return obj
 
 class Catalog(object):
     '''A class object to manage a catalogue and spawn corresponding Source
@@ -553,7 +593,7 @@ class Pink(object):
              An instance of the Binary class that will be used to train Pink
         '''
         if not isinstance(binary, Binary):
-            raise TypeError, 'binary is expected to be instance of Binary class'
+            raise TypeError('binary is expected to be instance of Binary class')
 
         self.binary = binary
         self.SOM = None
@@ -577,13 +617,45 @@ class Pink(object):
         if isinstance(file, str):
             pass
 
-
 if __name__ == '__main__':
-    cat = Catalog(catalog='/Users/tim/Documents/Postdoc_Work/SOM/FIRST_Catalog/first_14dec17.fits.gz')
-    print(cat)
 
-    cat.download_validate_images()
-    cat.collect_valid_sources()
-    cat.save_sources()
-    cat.reproject_valid_sources()
-    cat.dump_binary()
+    if '-c' in sys.argv:
+        cat = Catalog(catalog='/Users/tim/Documents/Postdoc_Work/SOM/FIRST_Catalog/first_14dec17.fits.gz')
+        print(cat)
+
+        cat.download_validate_images()
+        cat.collect_valid_sources()
+        cat.save_sources()
+        cat.reproject_valid_sources()
+        print('\n')
+        binary = cat.dump_binary()
+        binary.save()
+
+        print('\n', binary)
+
+        load_binary = Binary.loader('default.binary')
+
+        print('Printing the loaded binary...')
+        print(load_binary)
+
+    elif '-s' in sys.argv:
+        pos = SkyCoord(ra=111.892869323*u.deg, dec=64.6832779684*u.deg)
+
+        a = Source(pos, 'Images')
+        print(a)
+
+        a.download_images(report=True)
+        a.reproject()
+
+        print(a)
+        print('Is a valid: ', a.is_valid())
+
+        a.show_reprojected()
+
+        if a.valid:
+            with open('test.dumpy', 'wb') as of:
+                a.dump(of)
+    else:
+        print('Options:')
+        print(' -s : Run test code for Source class')
+        print(' -c : Run test code for Catalogue class')
