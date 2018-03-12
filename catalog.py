@@ -61,9 +61,12 @@ def make_dir(d):
 class Base(object):
     '''Base class to inherit from. 
     '''
-    def save(self, out_path='default.binary'):
+    def save(self, out_path):
         '''A function to save this Binary instance to disk, wrapping a reference to 
         the sources, channels that produced the PINK binary, and making a hash to
+
+        out_path - str
+              The path to write the pickled output to
         '''
         with open(out_path, 'wb') as out_file:
             pickle.dump(self.__dict__, out_file)
@@ -590,36 +593,34 @@ class Pink(Base):
         '''
         return self.__str__()
 
-    def __init__(self, binary):
+    def __init__(self, binary, pink_args = {}):
         '''Create the instance of the Pink object and set appropriate parameters
         
         binary - Binary
              An instance of the Binary class that will be used to train Pink
+        pink_args - dict
+             The arguments to supply to Pink
         '''
         if not isinstance(binary, Binary):
             raise TypeError('binary is expected to be instance of Binary class')
 
+        self trained = False
         self.binary = binary
         self.SOM = None
+        if pink_args:
+            self.pink_args = pink_args
+        else:
+            self.pink_args = {'som-width':10,
+                              'som-height':10}}
 
-    def save(self, out):
-        '''Save the current instance of the object to out
-
-        out - str
-            Output file name to dump the instance to
+    def train(self):
+        '''Train the SOM with PINK using the supplied options and Binary file
         '''
-        with open(out, 'wb') as out_file:
-            pickle.dump(self.__dict__, out_file)
+        if self.trained:
+            print('The SOM has been trained already')
+            return
 
-    @classmethod
-    def loader(cls, file):
-        '''Load and instance of this class from disk
         
-        file - str
-            Path to the file to open
-        '''
-        if isinstance(file, str):
-            pass
 
 if __name__ == '__main__':
 
