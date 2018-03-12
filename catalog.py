@@ -631,7 +631,7 @@ class Pink(Base):
 
         if pink_avail:
             self.exec_str = exec_str
-            self.pink_process = subprocess.run('Pink', self.exec_str)
+            self.pink_process = subprocess.run(['Pink', self.exec_str])
         else:
             print('PINK can not be found on this system...')
             
