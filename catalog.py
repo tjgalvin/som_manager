@@ -624,8 +624,8 @@ class Pink(Base):
             return
         
         pink_avail = True if shutil.which('Pink') is not None else False
-        exec_str+= ' '.join(f'--{k}={v}' for k,v in self.pink_args.items())
-        exec_str = f' --train {self.binary.binary_path} {self.SOM_path} '
+        exec_str = ' '.join(f'--{k}={v}' for k,v in self.pink_args.items())
+        exec_str+= f' --train {self.binary.binary_path} {self.SOM_path} '
 
 
         print(exec_str)
