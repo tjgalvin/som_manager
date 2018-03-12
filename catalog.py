@@ -651,7 +651,7 @@ if __name__ == '__main__':
         pink.train()
 
     elif '-c' in sys.argv:
-        cat = Catalog(catalog='/Users/tim/Documents/Postdoc_Work/SOM/FIRST_Catalog/first_14dec17.fits.gz')
+        cat = Catalog(catalog='./first_14dec17.fits.gz')
         print(cat)
 
         cat.download_validate_images()
