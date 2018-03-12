@@ -624,14 +624,14 @@ class Pink(Base):
             return
         
         pink_avail = True if shutil.which('Pink') is not None else False
-        exec_str = f'Pink --train {self.binary.binary_path} {self.SOM_path} '
+        exec_str = f'--train {self.binary.binary_path} {self.SOM_path} '
         exec_str+= ' '.join(f'--{k}={v}' for k,v in self.pink_args.items())
 
         print(exec_str)
 
         if pink_avail:
             self.exec_str = exec_str
-            self.pink_process = subprocess.run(self.exec_str)
+            self.pink_process = subprocess.run('Pink', self.exec_str)
         else:
             print('PINK can not be found on this system...')
             
