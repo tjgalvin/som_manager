@@ -3,8 +3,8 @@
 import io
 import os
 import sys
-import json
 import glob
+import shutil
 import pickle
 import struct
 import hashlib
@@ -579,8 +579,8 @@ class Pink(Base):
         '''Neatly print the contents of the instance
         '''
         out = f'The binary file attached: {self.binary.binary_path}\n'
-        out+= f'Contains {len(self.binary.sources)} sources'
-        out+= f'Channels are {self.binary.channels}'
+        out+= f'Contains {len(self.binary.sources)} sources\n'
+        out+= f'Channels are {self.binary.channels}\n'
         if self.SOM is None:
             out+= 'SOM is not trained'
         else:
@@ -604,14 +604,14 @@ class Pink(Base):
         if not isinstance(binary, Binary):
             raise TypeError('binary is expected to be instance of Binary class')
 
-        self trained = False
+        self.trained = False
         self.binary = binary
         self.SOM = None
         if pink_args:
             self.pink_args = pink_args
         else:
             self.pink_args = {'som-width':10,
-                              'som-height':10}}
+                              'som-height':10}
 
     def train(self):
         '''Train the SOM with PINK using the supplied options and Binary file
@@ -619,12 +619,29 @@ class Pink(Base):
         if self.trained:
             print('The SOM has been trained already')
             return
-
         
+        pink_avail = True if shutil.which('Pink') is not None else False
+
+        if not pink_avail:
+            print('PINK can not be found on this system...')
+            print(self.pink_args)
 
 if __name__ == '__main__':
 
-    if '-c' in sys.argv:
+    if '-p' in sys.argv:
+        load_binary = Binary.loader('default.binary')
+
+        print('Printing the loaded binary...')
+        print(load_binary)
+
+        pink = Pink(load_binary)       
+
+        print(pink)
+        print('\n')
+
+        pink.train()
+
+    elif '-c' in sys.argv:
         cat = Catalog(catalog='/Users/tim/Documents/Postdoc_Work/SOM/FIRST_Catalog/first_14dec17.fits.gz')
         print(cat)
 
