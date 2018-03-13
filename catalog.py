@@ -332,28 +332,42 @@ class Source(Base):
         data - numpy.ndarray
              The image that will be normalised to some scale
         '''
-        pass
+        return 1. * data / data.max()
 
-    def dump(self, of, order=None):
+    def dump(self, of, order=None, sigma=False, norm=False):
         '''Dump the contents of the common_images to a binary file 
         provided by the of file handler
 
         of - file
            File to write the binary images to
-
         order - list
              Order of the keys to write out to
+        sigma - False or float
+             If False, there will be no sigma clipping performed on the 
+             data. If float, then 
         '''
         if order is None:
             for img in self.common_images.values():
                 with open(img, 'rb') as in_file:
-                    of.write(in_file.read())
+                    data = np.load(in_file)
+                    if isinstance(sigma, float):
+                        data = self.sigma_clip(data, std=sigma)
+                    if norm:
+                        data = self.normalise(data)
+
+                    data.astype('f').tofile(of)
         else:
             for item in order:
                 if item not in self.common_images.keys():
                     raise ValueError
                 with open(self.common_images[item], 'rb') as in_file:
-                    of.write(in_file.read())
+                    data = np.load(in_file)
+                    if isinstance(sigma, float):
+                        data = self.sigma_clip(data, std=sigma)
+                    if norm:
+                        data = self.normalise(data)
+
+                    data.astype('f').tofile(of)
 
     def show_reprojected(self):
         '''Quick function to look at each of the 
@@ -390,13 +404,17 @@ class Binary(Base):
         '''
         return self.__str__()
 
-    def __init__(self, binary_path, sources, channels=''):
+    def __init__(self, binary_path, sources, sigma, norm, channels=''):
         '''Create and track the meta-information of the binary
 
         binary_path - str
              The path to the binary file
         source - list
              A list of the Source objects packed into the binary_path file
+        sigma - False of float
+            The option passed to each of the Source.dump() methods
+        norm - bool
+            The option passed to each of the Source.dump() methods
         channels - list
             A list of the channels/surveys packed into the binary_path file
         '''
@@ -404,6 +422,8 @@ class Binary(Base):
         self.binary_path = binary_path
         self.binary_hash = get_hash(self.binary_path)
         self.channels = channels
+        self.sigma = sigma_clip
+        self.norm = norm
 
 class Catalog(Base):
     '''A class object to manage a catalogue and spawn corresponding Source
@@ -536,7 +556,7 @@ class Catalog(Base):
         with ProgressBar():
             self.valid_sources = reduce(valid_sources).compute(num_workers=4)
 
-    def dump_binary(self, channels=['FIRST'], binary_out='default.bin'):
+    def dump_binary(self, channels=['FIRST'], binary_out='default.dump', sigma=False, norm=False):
         '''This function produces the binary file that is expected by PINK. It contains
         the total number of images to use, the number of chanels and the dimension in and y 
         axis
@@ -546,6 +566,9 @@ class Catalog(Base):
              the single survey, or a list of surveys to dump
         binary_out - str
              The name of the output binary file to create
+        sigma - Bool or Float
+             Passed directly to the Source.dump() method. If False, no sigma clipping. If
+             a float, then sigma clipping is performed.
         '''
         if isinstance(channels, str):
             channels = [channels]
@@ -710,3 +733,4 @@ if __name__ == '__main__':
         print('Options:')
         print(' -s : Run test code for Source class')
         print(' -c : Run test code for Catalogue class')
+        print(' -p : Run test code for the Pink class')
