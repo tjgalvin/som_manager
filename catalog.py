@@ -296,7 +296,7 @@ class Source(Base):
 
                 if nan_fail and np.isnan(data).any():
                     return
-                if shape_fail and np.any(np.abs(np.array(data.shape) - data.shape[0] > 5)):
+                if shape_fail and np.any(np.abs(np.array(data.shape) - data.shape[0]) > 5):
                     # Useful for WISE data, which will clip the image if the source
                     # falls on the edge of a mosaic image
                     return
@@ -422,7 +422,7 @@ class Binary(Base):
         self.binary_path = binary_path
         self.binary_hash = get_hash(self.binary_path)
         self.channels = channels
-        self.sigma = sigma_clip
+        self.sigma = sigma
         self.norm = norm
 
 class Catalog(Base):
@@ -556,16 +556,16 @@ class Catalog(Base):
         with ProgressBar():
             self.valid_sources = reduce(valid_sources).compute(num_workers=4)
 
-    def dump_binary(self, channels=['FIRST'], binary_out='default.dump', sigma=False, norm=False):
+    def dump_binary(self, binary_out, channels=['FIRST'], sigma=False, norm=False):
         '''This function produces the binary file that is expected by PINK. It contains
         the total number of images to use, the number of chanels and the dimension in and y 
         axis
 
+        binary_out - str
+             The name of the output binary file to create
         channels - list or str
              The channels to write out to the dumped binary file. Either the name of
              the single survey, or a list of surveys to dump
-        binary_out - str
-             The name of the output binary file to create
         sigma - Bool or Float
              Passed directly to the Source.dump() method. If False, no sigma clipping. If
              a float, then sigma clipping is performed.
@@ -591,9 +591,9 @@ class Catalog(Base):
             out_file.write(struct.pack('i', y_dim))
 
             for s in self.valid_sources:
-                s.dump(out_file, order=channels)
+                s.dump(out_file, order=channels, sigma=sigma, norm=norm)
 
-        return Binary(binary_out, self.valid_sources, channels=channels)
+        return Binary(binary_out, self.valid_sources, sigma, norm, channels=channels)
 
 class Pink(Base):
     '''Manage a single Pink training session, including the arguments used to run
@@ -672,25 +672,81 @@ class Pink(Base):
             self.SOM_hash = get_hash(self.SOM_path)
         else:
             print('PINK can not be found on this system...')
-            
+
+    def show_som(self, channel=0):
+        '''Method to plot the trained SOM, and associated plotting options
+
+        channel - int
+             The channel from the SOM to plot. Defaults to the first (zero-index) channel
+        '''
+        if not self.trained:
+            return
+        
+        if get_hash(self.SOM_path) != self.SOM_hash:
+            return
+
+        with open(self.SOM_path, 'rb') as som:
+            # Unpack the header information
+            numberOfChannels, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height = struct.unpack('i' * 6, som.read(4*6))
+            SOM_size = np.prod([SOM_width, SOM_height, SOM_depth])
+
+            # Check to ensure that the request channel exists. Remeber we are comparing
+            # the index
+            if channel > numberOfChannels - 1:
+                return
+
+            dataSize = numberOfChannels * SOM_size * neuron_width * neuron_height
+            array = np.array(struct.unpack('f' * dataSize, som.read(dataSize * 4)))
+
+            image_width = SOM_width * neuron_width
+            image_height = SOM_depth * SOM_height * neuron_height
+            data = np.ndarray([SOM_width, SOM_height, SOM_depth, numberOfChannels, neuron_width, neuron_height], 'float', array)
+            data = np.swapaxes(data, 0, 5) # neuron_height, SOM_height, SOM_depth, numberOfChannels, neuron_width, SOM_width
+            data = np.swapaxes(data, 0, 2) # SOM_depth, SOM_height, neuron_height, numberOfChannels, neuron_width, SOM_width
+            data = np.swapaxes(data, 4, 5) # SOM_depth, SOM_height, neuron_height, numberOfChannels, SOM_width, neuron_width
+            data = np.reshape(data, (image_height, numberOfChannels, image_width))
+
+            data_1 = data
+
+            fig, ax = plt.subplots(SOM_width, SOM_height, figsize=(16,16), 
+                                gridspec_kw={'hspace':0.001,'wspace':0.001,
+                                            'left':0.001, 'right':0.999,
+                                            'bottom':0.001, 'top':0.9})
+
+            for x in range(SOM_width):
+                for y in range(SOM_height):
+                    d = data_1[x*neuron_width:(x+1)*neuron_width, 
+                               int(channel),
+                               y*neuron_width:(y+1)*neuron_width]
+                    ax[x,y].imshow(d, cmap=plt.get_cmap('coolwarm'))
+                    ax[x,y].get_xaxis().set_ticks([])
+                    ax[x,y].get_yaxis().set_ticks([])
+
+            fig.suptitle((f'Images: {len(self.binary.sources)} - Sigma: {self.binary.sigma} - Norm: {self.binary.norm}\n'
+                          f'Channel: {channel}'))
+            # fig.subplots_adjust(top=0.90)
+            fig.savefig(f'{self.SOM_path}-ch_{channel}.pdf')
+
 if __name__ == '__main__':
 
     if '-p' in sys.argv:
-        load_binary = Binary.loader('default.binary')
+        for i in ['default_sig_chan.binary', 'default.binary', 'default_sig.binary', 'default_norm.binary', 'default_sig_norm.binary']:
+            load_binary = Binary.loader(i)
 
-        print('Printing the loaded binary...')
-        print(load_binary)
+            print('Printing the loaded binary...')
+            print(load_binary)
 
-        pink = Pink(load_binary, pink_args={'som-width':6,
-                                            'som-height':6})       
+            pink = Pink(load_binary, pink_args={'som-width':6,
+                                                'som-height':6})  
+            print(pink)
+            print('\n')
 
-        print(pink)
-        print('\n')
+            pink.train()
 
-        pink.train()
-
-        print('\n')
-        print(pink)
+            print('\n')
+            print(pink)
+            pink.show_som(channel=0)
+            pink.show_som(channel=1)
 
     elif '-c' in sys.argv:
         cat = Catalog(catalog='./first_14dec17.fits.gz')
@@ -701,8 +757,20 @@ if __name__ == '__main__':
         cat.save_sources()
         cat.reproject_valid_sources()
         print('\n')
-        binary = cat.dump_binary()
+        binary = cat.dump_binary('default.dump')
         binary.save('default.binary')
+
+        binary_sig_chan = cat.dump_binary('default_sig_chan.dump' ,sigma=3., channels=['FIRST','WISE_W1'])
+        binary_sig_chan.save('default_sig_chan.binary')
+
+        binary_sig = cat.dump_binary('default_sig.dump' ,sigma=3.)
+        binary_sig.save('default_sig.binary')
+
+        binary_norm = cat.dump_binary('default_norm.dump', norm=True)
+        binary_norm.save('default_norm.binary')
+
+        binary_sig_norm = cat.dump_binary('default_norm_sig.dump', sigma=3., norm=True)
+        binary_sig_norm.save('default_sig_norm.binary')
 
         print('\n', binary)
 
