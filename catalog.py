@@ -63,8 +63,7 @@ class Base(object):
     '''Base class to inherit from. 
     '''
     def save(self, out_path):
-        '''A function to save this Binary instance to disk, wrapping a reference to 
-        the sources, channels that produced the PINK binary, and making a hash to
+        '''A function to save this class instance to disk.
 
         out_path - str
               The path to write the pickled output to
@@ -290,6 +289,8 @@ class Source(Base):
         for img in self.images.values():
             if img == 'ERROR':
                 return
+            # if self.filename is None:
+            #     return
 
             with pyfits.open(img) as fits:
                 data = fits[0].data.squeeze()
@@ -492,9 +493,23 @@ class Catalog(Base):
         for index, r in tqdm(self.tab.iterrows()):
             self.sources.append(Source(SkyCoord(ra=r['RA']*u.deg, dec=r['DEC']*u.deg), self.out_dir, info=r) )
 
-    def download_validate_images(self):
+    def _chunk_sources(self, chunk_length):
+        '''Function to yield a smaller subset of the self.sources() attribute
+        so that Dask does not take forever building the work graph
+        
+        chunk_length - int
+             Length of elements in each chunk
+        '''
+        for i in range(0, len(self.sources), chunk_length):
+            yield self.sources[i:i+chunk_length]
+
+    def download_validate_images(self, chunk_length=3000):
         '''Kick off the download_images and is_valid method of each of the 
         Source objects
+
+        chunk_length - int
+             To avoid overhead of Dask builing the graph, which appear to scale to N**2, 
+             break up the input list into smaller chunks
         '''
         @delayed
         def down(s):
@@ -510,11 +525,16 @@ class Catalog(Base):
         def reduce(s):
             return s
 
-        print('\nDownloading and validating the images...')    
-        sources = [down(s) for s in self.sources]
-        sources = [val(s) for s in sources]
-        with ProgressBar():
-            self.sources = reduce(sources).compute(num_workers=75)
+        results = []
+
+        print('\nDownloading and validating the images...') 
+        for sub_sources in self._chunk_sources(chunk_length):
+            sub_sources = [down(s) for s in sub_sources]
+            sub_sources = [val(s) for s in sub_sources]
+            with ProgressBar():
+                results += reduce(sub_sources).compute(num_workers=75)
+
+        self.sources = results
 
     def collect_valid_sources(self):
         '''Make a new list of just the valid sources
@@ -751,7 +771,7 @@ if __name__ == '__main__':
             pink.show_som(channel=1)
 
     elif '-c' in sys.argv:
-        cat = Catalog(catalog='./first_14dec17.fits.gz', step=250)
+        cat = Catalog(catalog='./first_14dec17.fits.gz', step=50)
         print(cat)
 
         cat.download_validate_images()
