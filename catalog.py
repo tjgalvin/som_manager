@@ -443,7 +443,7 @@ class Catalog(Base):
         return self.__str__()
 
     def __init__(self, catalog=None, out_dir='Images', sources_dir='Sources',
-                       scan_sources=True):
+                       scan_sources=True, step=1000):
         '''Accept the name of a catalogue and read it in
 
         catalog - str
@@ -454,6 +454,8 @@ class Catalog(Base):
                The name of the folder that Source class instances will be pickled to
         scan_sources - bool
                By default, attempt to scan in pickled Source class instances
+        step - int
+               Reduce the size of the input catalog by stepping every `step` rows
         '''
         self.out_dir = out_dir
         self.sources_dir = sources_dir
@@ -477,7 +479,7 @@ class Catalog(Base):
 
         elif catalog is not None:
             self.catalog = catalog
-            self.tab = Table.read(catalog)[::1500].to_pandas()
+            self.tab = Table.read(catalog)[::step].to_pandas()
             self._gen_sources()
 
         else:
@@ -730,7 +732,7 @@ class Pink(Base):
 if __name__ == '__main__':
 
     if '-p' in sys.argv:
-        for i in ['default_sig_chan.binary', 'default.binary', 'default_sig.binary', 'default_norm.binary', 'default_sig_norm.binary']:
+        for i in ['default_sig_norm_chan.binary', 'default_sig_chan.binary', 'default.binary', 'default_sig.binary', 'default_norm.binary', 'default_sig_norm.binary']:
             load_binary = Binary.loader(i)
 
             print('Printing the loaded binary...')
@@ -749,7 +751,7 @@ if __name__ == '__main__':
             pink.show_som(channel=1)
 
     elif '-c' in sys.argv:
-        cat = Catalog(catalog='./first_14dec17.fits.gz')
+        cat = Catalog(catalog='./first_14dec17.fits.gz', step=250)
         print(cat)
 
         cat.download_validate_images()
@@ -762,6 +764,9 @@ if __name__ == '__main__':
 
         binary_sig_chan = cat.dump_binary('default_sig_chan.dump' ,sigma=3., channels=['FIRST','WISE_W1'])
         binary_sig_chan.save('default_sig_chan.binary')
+
+        binary_sig_chan = cat.dump_binary('default_sig_norm_chan.dump', norm=True ,sigma=3., channels=['FIRST','WISE_W1'])
+        binary_sig_chan.save('default_sig_norm_chan.binary')
 
         binary_sig = cat.dump_binary('default_sig.dump' ,sigma=3.)
         binary_sig.save('default_sig.binary')
