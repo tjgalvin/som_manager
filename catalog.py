@@ -653,14 +653,20 @@ class Pink(Base):
 
         self.trained = False
         self.binary = binary
+        # Items to generate the SOM
         self.SOM_path = f'{self.binary.binary_path}.Trained_SOM'
         self.SOM_hash = ''
         self.exec_str = ''
+
         if pink_args:
             self.pink_args = pink_args
         else:
             self.pink_args = {'som-width':10,
                               'som-height':10}
+
+        # Items for the Heatmap
+        self.heat_path = f'{self.binary_path}.heat'
+        self.heat_hash = ''
 
     def update_pink_args(self, **kwargs):
         '''Helper function to update pink arguments that may not have been included
@@ -748,6 +754,33 @@ class Pink(Base):
                           f'Channel: {channel}'))
             # fig.subplots_adjust(top=0.90)
             fig.savefig(f'{self.SOM_path}-ch_{channel}.pdf')
+
+    def produce_heatmap(self, binary=None):
+        '''Using Pink, produce a heatmap of the input Binary instance. 
+        Note that by default the Binary instance attached to self.binary will be used. 
+
+        binary - Binary or None
+             An instance of the Binary class with sources to match to the SOM. If None, 
+             than use the Binary instance attached to this Pink class instance
+        '''
+        if binary is None:
+            binary = self.binary
+        if not self.trained:
+            return
+        if self.SOM_hash != get_hash(self.SOM_path):
+            raise ValueError(f'The hash checked failed for {self.SOM_path}')        
+        if binary.binary_hash != get_hash(binary.binary_path):
+            raise ValueError(f'The hash checked failed for {self.binary.binary_path}')
+
+        pink_avail = True if shutil.which('Pink') is not None else False        
+        exec_str = f'Pink --map {self.binary.binary_path} {self.heat_path} {self.SOM_path}'
+        
+        if pink_avail:
+            subprocess.run(exec_str.split())
+            self.heat_hash = get_hash(self.heat_path)
+        else:
+            print('PINK can not be found on this system...')
+
 
 if __name__ == '__main__':
 
