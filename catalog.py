@@ -30,6 +30,18 @@ import warnings
 from astropy.utils.exceptions import AstropyWarning
 warnings.simplefilter('ignore', category=AstropyWarning)
 
+def chunk_sources(l, chunk_length):
+    '''Function to yield a smaller subset of the self.sources() attribute
+    so that Dask does not take forever building the work graph
+    
+    l - list or list like
+          The list to return in chunks
+    chunk_length - int
+          Length of elements in each chunk
+    '''
+    for i in range(0, len(l), chunk_length):
+        yield l[i:i+chunk_length]
+
 def get_hash(f, blocksize=56332):
     '''Will return the SHA1 hash of the input file
 
@@ -289,8 +301,8 @@ class Source(Base):
         for img in self.images.values():
             if img == 'ERROR':
                 return
-            # if self.filename is None:
-            #     return
+            if self.filename is None:
+                return
 
             with pyfits.open(img) as fits:
                 data = fits[0].data.squeeze()
@@ -493,16 +505,6 @@ class Catalog(Base):
         for index, r in tqdm(self.tab.iterrows()):
             self.sources.append(Source(SkyCoord(ra=r['RA']*u.deg, dec=r['DEC']*u.deg), self.out_dir, info=r) )
 
-    def _chunk_sources(self, chunk_length):
-        '''Function to yield a smaller subset of the self.sources() attribute
-        so that Dask does not take forever building the work graph
-        
-        chunk_length - int
-             Length of elements in each chunk
-        '''
-        for i in range(0, len(self.sources), chunk_length):
-            yield self.sources[i:i+chunk_length]
-
     def download_validate_images(self, chunk_length=3000):
         '''Kick off the download_images and is_valid method of each of the 
         Source objects
@@ -527,12 +529,12 @@ class Catalog(Base):
 
         results = []
 
-        print('\nDownloading and validating the images...') 
-        for sub_sources in self._chunk_sources(chunk_length):
+        print(f'\nDownloading and validating {len(self.sources)} sources...') 
+        for sub_sources in chunk_sources(self.sources, chunk_length):
             sub_sources = [down(s) for s in sub_sources]
             sub_sources = [val(s) for s in sub_sources]
             with ProgressBar():
-                results += reduce(sub_sources).compute(num_workers=75)
+                results += reduce(sub_sources).compute(num_workers=150)
 
         self.sources = results
 
@@ -552,10 +554,11 @@ class Catalog(Base):
         print(f'\nSaving sources to {path}')
 
         for s in tqdm(self.sources):
-            with open(f"{path}/{s.filename.replace('.fits','.pkl')}", 'wb') as out_file:
-                pickle.dump(s, out_file, protocol=3)
+            if s.filename is not None:
+                with open(f"{path}/{s.filename.replace('.fits','.pkl')}", 'wb') as out_file:
+                    pickle.dump(s, out_file, protocol=3)
 
-    def reproject_valid_sources(self, master='FIRST'):
+    def reproject_valid_sources(self, master='FIRST', chunk_length=3000):
         '''Proceed to reproject each of the images onto the common pixel grid
         of the elected master image
 
@@ -572,11 +575,15 @@ class Catalog(Base):
         def reduce(s):
             return s
 
+        results = []
         print(f'Reprojecting {len(self.valid_sources)} sources...')
-        valid_sources = [reproject(s) for s in self.valid_sources]
+        for sub_sources in chunk_sources(self.valid_sources, chunk_length):
+            valid_sources = [reproject(s) for s in sub_sources]
 
-        with ProgressBar():
-            self.valid_sources = reduce(valid_sources).compute(num_workers=4)
+            with ProgressBar():
+                results += reduce(valid_sources).compute(num_workers=4)
+
+        self.valid_sources = results
 
     def dump_binary(self, binary_out, channels=['FIRST'], sigma=False, norm=False):
         '''This function produces the binary file that is expected by PINK. It contains
@@ -591,6 +598,10 @@ class Catalog(Base):
         sigma - Bool or Float
              Passed directly to the Source.dump() method. If False, no sigma clipping. If
              a float, then sigma clipping is performed.
+        norm - bool
+             Sets whether normalisation on each plane will be performed. At the moment this
+             is an independent, meaning each plane is normalised independently from one
+             another
         '''
         if isinstance(channels, str):
             channels = [channels]
@@ -755,7 +766,7 @@ class Pink(Base):
             # fig.subplots_adjust(top=0.90)
             fig.savefig(f'{self.SOM_path}-ch_{channel}.pdf')
 
-    def produce_heatmap(self, binary=None):
+    def heatmap(self, binary=None):
         '''Using Pink, produce a heatmap of the input Binary instance. 
         Note that by default the Binary instance attached to self.binary will be used. 
 
@@ -780,7 +791,6 @@ class Pink(Base):
             self.heat_hash = get_hash(self.heat_path)
         else:
             print('PINK can not be found on this system...')
-
 
 if __name__ == '__main__':
 
