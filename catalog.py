@@ -16,6 +16,7 @@ import astropy.units as u
 import matplotlib.pyplot as plt
 
 from tqdm import tqdm
+from collections import defaultdict
 # from source import Source
 from astropy.table import Table
 from astropy.io import fits as pyfits
@@ -470,6 +471,15 @@ class Binary(Base):
 
             return data
 
+    def get_data(self, label):
+        '''Function to return some property from each of the attached self.sources
+        objects
+
+        label - str
+             Name of the field in the self.sources object to retreive
+        '''
+        return [ s.info[label] for s in self.sources ]
+
 class Catalog(Base):
     '''A class object to manage a catalogue and spawn corresponding Source
     classes
@@ -813,7 +823,6 @@ class Pink(Base):
 
         fig.suptitle((f'Images: {len(self.binary.sources)} - Sigma: {self.binary.sigma} - Norm: {self.binary.norm}\n'
                         f'Channel: {channel}'))
-        # fig.subplots_adjust(top=0.90)
         fig.savefig(f'{self.SOM_path}-ch_{channel}.pdf')
 
     def _process_heatmap(self, image_number=0, plot=False, channel=0, binary=None):
@@ -825,7 +834,8 @@ class Pink(Base):
         plot - bool
                Plot the weight map to inspect quickly
         channel - int
-               The channel/plan of the SOM to extract
+               The channel/plan of the SOM to extract. This is only used for plotting
+               and has no impact on the actual heatmap
         binary - Binary or None
                An instance of the Binary class to manage a binary image file
                from which a source image will be pulled from. if none, revert
@@ -845,8 +855,11 @@ class Pink(Base):
             data = np.ndarray([SOM_width, SOM_height, SOM_depth], 'float', array)
             data = np.swapaxes(data, 0, 2)
             data = np.reshape(data, (image_height, image_width))
-            data = data[::-1]
+            data = data[::-1] # Apprently the first axis is out of order when you
+                              # plot it agaisnt the proper SOM and an the corresponding
+                              # source
 
+            # Simple diagnostic plot
             if plot:
                 fig, (ax1, ax2, ax3) = plt.subplots(1,3)
                 params = self.retrieve_som_data(channel=channel)
@@ -862,8 +875,20 @@ class Pink(Base):
 
                 # plt.show() will block, but fig.show() wont
                 plt.show()
+            
+            return data
 
-    def heatmap(self, binary=None, plot=False, **kwargs):
+    def _apply_heatmap(self):
+        '''Function to loop through the Pink map output (i.e. self.heatmap) and 
+        read in as a list each source heatmap
+        '''
+        result = []
+        for index, src in enumerate(self.binary.sources):
+            result.append(self._process_heatmap(image_number=index))
+        
+        self.src_heatmap = result
+
+    def heatmap(self, binary=None, plot=False, apply=False, **kwargs):
         '''Using Pink, produce a heatmap of the input Binary instance. 
         Note that by default the Binary instance attached to self.binary will be used. 
 
@@ -873,6 +898,8 @@ class Pink(Base):
         plot - bool
              Make an initial diagnostic plot of the SOM and the correponding heatmap.
              This will show the first source of the binary object
+        apply - bool
+             Add an attribute to the class instance with the list of heatmaps
         kwargs - dict
              Additional parameters passed directly to _process_heatmap()
         '''
@@ -894,19 +921,70 @@ class Pink(Base):
                 subprocess.run(exec_str.split())
                 self.heat_hash = get_hash(self.heat_path)
             self._process_heatmap(plot=plot, binary=binary, **kwargs)
+            if apply:
+                self._apply_heatmap()
         else:
             print('PINK can not be found on this system...')
+
+    def attribute_plot(self, book, shape):
+        '''Produce a grid of histograms based on the list of items inside it
+        
+        book - dict
+            A dictionary whose keys are the location on the heatmap, and values
+            are the list of values of sources who most belonged to that grid
+        shape - tuple
+            The shape of the grid. Should attempt to get this from the keys or
+            possible recreate it like in self.attribute_heatmap()
+        '''
+        # Step one, get range
+        vmin, vmax = np.inf, 0
+        for k, v in book.items():
+            if min(v) < vmin:
+                vmin = min(v)
+            if max(v) > vmax:
+                vmax = max(v)
+        bins = np.linspace(vmin, vmax, 10)
+
+        fig, ax = plt.subplots(nrows=shape[0], ncols=shape[1])
+
+        for k, v in book.items():
+            print(k, len(v))
+            ax[k].hist(v, bins=bins)
+
+        plt.show()
+
+    def attribute_heatmap(self, label='SIDEPROB', plot=True):
+        '''Based on the most likely grid/best match in the heatmap for each source
+        build up a distibution plot of each some label/parameters
+
+        label - str
+             The label/value to extract from each source
+        plot - bool
+             Plot the attribute heatmap/distribution
+        '''
+        shape = self.src_heatmap[0].shape
+        items = self.binary.get_data(label)
+
+        book = defaultdict(list)
+
+        for heat, item in zip(self.src_heatmap, items):
+            loc = np.unravel_index(np.argmax(heat, axis=None), heat.shape)
+            book[loc].append(item)
+
+        if plot:
+            self.attribute_plot(book, shape)
 
 if __name__ == '__main__':
 
     if '-h' in sys.argv:
-        pink_file = 'default_sig_norm.Pink'
+        pink_file = 'default_sig_chan.Pink'
         print(f'Loading in {pink_file}')
         load_pink = Pink.loader(pink_file)
 
         print(load_pink)
 
-        load_pink.heatmap(plot=True, image_number=0)
+        load_pink.heatmap(plot=False, image_number=0, apply=True)
+        load_pink.attribute_heatmap(plot=True, label='RMS')
 
     elif '-p' in sys.argv:
         for i in ['default_sig_norm_chan.binary', 'default_sig_chan.binary', 'default.binary', 'default_sig.binary', 'default_norm.binary', 'default_sig_norm.binary']:
@@ -930,7 +1008,7 @@ if __name__ == '__main__':
             pink.save(i.replace('binary', 'Pink'))
 
     elif '-c' in sys.argv:
-        cat = Catalog(catalog='./first_14dec17.fits.gz', step=50)
+        cat = Catalog(catalog='./first_14dec17.fits.gz', step=5)
         print(cat)
 
         cat.download_validate_images()
