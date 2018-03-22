@@ -273,6 +273,8 @@ class Source(Base):
             else:
                 common = rp.reproject_interp(self.images[key], master_fits[0].header)
                 self.common_images[key] = common[0]
+                if np.any(np.isnan(common[0])):
+                    self.valid = False
 
         # Attempt to write things to disk to save space in memory
         for k, v in self.common_images.items():
@@ -351,8 +353,9 @@ class Source(Base):
         '''Dump the contents of the common_images to a binary file 
         provided by the of file handler
 
-        of - file
-           File to write the binary images to
+        of - file or None
+           File to write the binary images to. If none, return data, otherwise
+           write it to the file
         order - list
              Order of the keys to write out to
         sigma - False or float
@@ -368,7 +371,10 @@ class Source(Base):
                     if norm:
                         data = self.normalise(data)
 
-                    data.astype('f').tofile(of)
+                    if of is None:
+                        return data.astype('float')
+                    else:
+                        data.astype('f').tofile(of)
         else:
             for item in order:
                 if item not in self.common_images.keys():
@@ -380,7 +386,10 @@ class Source(Base):
                     if norm:
                         data = self.normalise(data)
 
-                    data.astype('f').tofile(of)
+                    if of is None:
+                        return data
+                    else:
+                        data.astype('f').tofile(of)
 
     def show_reprojected(self):
         '''Quick function to look at each of the 
@@ -437,6 +446,29 @@ class Binary(Base):
         self.channels = channels
         self.sigma = sigma
         self.norm = norm
+
+    def get_image(self, index, channel=0):
+        '''Return the index-th image that was dumped to the binary image file that
+        is managed by this instance of Binary
+        
+        index - int
+            The source image to return
+        channel - int
+            The channel number of the image to return
+        '''
+        with open(self.binary_path, 'rb') as in_file:
+            numberOfImages, numberOfChannels, width, height = struct.unpack('i' * 4, in_file.read(4 * 4))
+            if index > numberOfImages:
+                return None
+            if channel > numberOfChannels:
+                return None
+
+            size = width * height
+            in_file.seek((index*numberOfChannels + channel) * size*4, 1)
+            array = np.array(struct.unpack('f' * size, in_file.read(size*4)))
+            data = np.ndarray([width,height], 'float', array)
+
+            return data
 
 class Catalog(Base):
     '''A class object to manage a catalogue and spawn corresponding Source
@@ -676,7 +708,7 @@ class Pink(Base):
                               'som-height':10}
 
         # Items for the Heatmap
-        self.heat_path = f'{self.binary_path}.heat'
+        self.heat_path = f'{self.binary.binary_path}.heat'
         self.heat_hash = ''
 
     def update_pink_args(self, **kwargs):
@@ -712,17 +744,19 @@ class Pink(Base):
         else:
             print('PINK can not be found on this system...')
 
-    def show_som(self, channel=0):
-        '''Method to plot the trained SOM, and associated plotting options
+    def retrieve_som_data(self, channel=0):
+        '''If trained, this function will return the SOM data from some desired
+        channel
 
-        channel - int
-             The channel from the SOM to plot. Defaults to the first (zero-index) channel
+        channel - int or None
+             The channel from the some to retrieve. If a negative number or None
+             return the entire structure, otherwise return that channel number
         '''
         if not self.trained:
-            return
+            return None
         
         if get_hash(self.SOM_path) != self.SOM_hash:
-            return
+            return None
 
         with open(self.SOM_path, 'rb') as som:
             # Unpack the header information
@@ -732,7 +766,7 @@ class Pink(Base):
             # Check to ensure that the request channel exists. Remeber we are comparing
             # the index
             if channel > numberOfChannels - 1:
-                return
+                return None
 
             dataSize = numberOfChannels * SOM_size * neuron_width * neuron_height
             array = np.array(struct.unpack('f' * dataSize, som.read(dataSize * 4)))
@@ -745,34 +779,101 @@ class Pink(Base):
             data = np.swapaxes(data, 4, 5) # SOM_depth, SOM_height, neuron_height, numberOfChannels, SOM_width, neuron_width
             data = np.reshape(data, (image_height, numberOfChannels, image_width))
 
-            data_1 = data
+            if channel < 0 or channel is None:
+                # Leave data as is and return
+                pass
+            else:
+                data = data[:,channel,:]
 
-            fig, ax = plt.subplots(SOM_width, SOM_height, figsize=(16,16), 
-                                gridspec_kw={'hspace':0.001,'wspace':0.001,
-                                            'left':0.001, 'right':0.999,
-                                            'bottom':0.001, 'top':0.9})
+            return (data, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height)
 
-            for x in range(SOM_width):
-                for y in range(SOM_height):
-                    d = data_1[x*neuron_width:(x+1)*neuron_width, 
-                               int(channel),
-                               y*neuron_width:(y+1)*neuron_width]
-                    ax[x,y].imshow(d, cmap=plt.get_cmap('coolwarm'))
-                    ax[x,y].get_xaxis().set_ticks([])
-                    ax[x,y].get_yaxis().set_ticks([])
+    def show_som(self, channel=0):
+        '''Method to plot the trained SOM, and associated plotting options
 
-            fig.suptitle((f'Images: {len(self.binary.sources)} - Sigma: {self.binary.sigma} - Norm: {self.binary.norm}\n'
-                          f'Channel: {channel}'))
-            # fig.subplots_adjust(top=0.90)
-            fig.savefig(f'{self.SOM_path}-ch_{channel}.pdf')
+        channel - int
+             The channel from the SOM to plot. Defaults to the first (zero-index) channel
+        plot - boo
+        '''
+        params = self.retrieve_som_data(channel=channel)
+        if params is None:
+            return
+        (data, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height) = params
 
-    def heatmap(self, binary=None):
+        fig, ax = plt.subplots(SOM_width, SOM_height, figsize=(16,16), 
+                            gridspec_kw={'hspace':0.001,'wspace':0.001,
+                                        'left':0.001, 'right':0.999,
+                                        'bottom':0.001, 'top':0.9})
+
+        for x in range(SOM_width):
+            for y in range(SOM_height):
+                d = data_1[x*neuron_width:(x+1)*neuron_width, 
+                            int(channel),
+                            y*neuron_width:(y+1)*neuron_width]
+                ax[x,y].imshow(d, cmap=plt.get_cmap('coolwarm'))
+                ax[x,y].get_xaxis().set_ticks([])
+                ax[x,y].get_yaxis().set_ticks([])
+
+        fig.suptitle((f'Images: {len(self.binary.sources)} - Sigma: {self.binary.sigma} - Norm: {self.binary.norm}\n'
+                        f'Channel: {channel}'))
+        # fig.subplots_adjust(top=0.90)
+        fig.savefig(f'{self.SOM_path}-ch_{channel}.pdf')
+
+    def _process_heatmap(self, image_number=0, plot=False, channel=0, binary=None):
+        '''Function to process the heatmap file produced by the `--map`
+        option in the Pink utility
+
+        image_number - int
+               Index of the image to open and display the map for
+        plot - bool
+               Plot the weight map to inspect quickly
+        channel - int
+               The channel/plan of the SOM to extract
+        binary - Binary or None
+               An instance of the Binary class to manage a binary image file
+               from which a source image will be pulled from. if none, revert
+               to the one contained in this instance
+        '''
+        if binary is None:
+            binary = self.binary
+            
+        with open(self.heat_path, 'rb') as in_file:
+            numberOfImages, SOM_width, SOM_height, SOM_depth = struct.unpack('i' * 4, in_file.read(4*4))
+            
+            size = SOM_width * SOM_height * SOM_depth
+            image_width = SOM_width
+            image_height = SOM_depth * SOM_height
+            in_file.seek(image_number * size * 4, 1)
+            array = np.array(struct.unpack('f' * size, in_file.read(size * 4)))
+            data = np.ndarray([SOM_width, SOM_height, SOM_depth], 'float', array)
+            data = np.swapaxes(data, 0, 2)
+            data = np.reshape(data, (image_height, image_width))
+
+            if plot:
+                fig, (ax1, ax2, ax3) = plt.subplots(1,3)
+                params = self.retrieve_som_data(channel=channel)
+                if params is None:
+                    return
+                (som, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height) = params
+
+                source_img = binary.get_image(image_number)
+
+                ax1.imshow(data)
+                ax2.imshow(som)
+                ax3.imshow(source_img)
+
+                # plt.show() will block, but fig.show() wont
+                plt.show()
+
+    def heatmap(self, binary=None, plot=False):
         '''Using Pink, produce a heatmap of the input Binary instance. 
         Note that by default the Binary instance attached to self.binary will be used. 
 
         binary - Binary or None
              An instance of the Binary class with sources to match to the SOM. If None, 
              than use the Binary instance attached to this Pink class instance
+        plot - bool
+             Make an initial diagnostic plot of the SOM and the correponding heatmap.
+             This will show the first source of the binary object
         '''
         if binary is None:
             binary = self.binary
@@ -784,18 +885,31 @@ class Pink(Base):
             raise ValueError(f'The hash checked failed for {self.binary.binary_path}')
 
         pink_avail = True if shutil.which('Pink') is not None else False        
-        exec_str = f'Pink --map {self.binary.binary_path} {self.heat_path} {self.SOM_path}'
+        exec_str = f'Pink --map {self.binary.binary_path} {self.heat_path} {self.SOM_path} '
+        exec_str += ' '.join(f'--{k}={v}' for k,v in self.pink_args.items())
         
         if pink_avail:
-            subprocess.run(exec_str.split())
-            self.heat_hash = get_hash(self.heat_path)
+            if not os.path.exists(self.heat_path):
+                subprocess.run(exec_str.split())
+                self.heat_hash = get_hash(self.heat_path)
+            self._process_heatmap(plot=plot, binary=binary)
         else:
             print('PINK can not be found on this system...')
 
 if __name__ == '__main__':
 
-    if '-p' in sys.argv:
-        for i in ['default_sig_norm_chan.binary', 'default_sig_chan.binary', 'default.binary', 'default_sig.binary', 'default_norm.binary', 'default_sig_norm.binary']:
+    if '-h' in sys.argv:
+        pink_file = 'default_sig_norm.Pink'
+        print(f'Loading in {pink_file}')
+        load_pink = Pink.loader(pink_file)
+
+        print(load_pink)
+
+        load_pink.heatmap(plot=True)
+
+    elif '-p' in sys.argv:
+        # for i in ['default_sig_norm_chan.binary', 'default_sig_chan.binary', 'default.binary', 'default_sig.binary', 'default_norm.binary', 'default_sig_norm.binary']:
+        for i in ['default_sig_norm.binary']:
             load_binary = Binary.loader(i)
 
             print('Printing the loaded binary...')
@@ -812,6 +926,7 @@ if __name__ == '__main__':
             print(pink)
             pink.show_som(channel=0)
             pink.show_som(channel=1)
+            pink.save(i.replace('binary', 'Pink'))
 
     elif '-c' in sys.argv:
         cat = Catalog(catalog='./first_14dec17.fits.gz', step=50)
@@ -821,6 +936,7 @@ if __name__ == '__main__':
         cat.collect_valid_sources()
         cat.save_sources()
         cat.reproject_valid_sources()
+        cat.collect_valid_sources()
         print('\n')
         binary = cat.dump_binary('default.dump')
         binary.save('default.binary')
@@ -870,3 +986,4 @@ if __name__ == '__main__':
         print(' -s : Run test code for Source class')
         print(' -c : Run test code for Catalogue class')
         print(' -p : Run test code for the Pink class')
+        print(' -h : Run the heatmap code for a trained Pink model')
