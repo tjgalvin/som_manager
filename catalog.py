@@ -792,7 +792,6 @@ class Pink(Base):
 
         channel - int
              The channel from the SOM to plot. Defaults to the first (zero-index) channel
-        plot - boo
         '''
         params = self.retrieve_som_data(channel=channel)
         if params is None:
@@ -806,9 +805,8 @@ class Pink(Base):
 
         for x in range(SOM_width):
             for y in range(SOM_height):
-                d = data_1[x*neuron_width:(x+1)*neuron_width, 
-                            int(channel),
-                            y*neuron_width:(y+1)*neuron_width]
+                d = data[x*neuron_width:(x+1)*neuron_width, 
+                         y*neuron_width:(y+1)*neuron_width]
                 ax[x,y].imshow(d, cmap=plt.get_cmap('coolwarm'))
                 ax[x,y].get_xaxis().set_ticks([])
                 ax[x,y].get_yaxis().set_ticks([])
@@ -847,6 +845,7 @@ class Pink(Base):
             data = np.ndarray([SOM_width, SOM_height, SOM_depth], 'float', array)
             data = np.swapaxes(data, 0, 2)
             data = np.reshape(data, (image_height, image_width))
+            data = data[::-1]
 
             if plot:
                 fig, (ax1, ax2, ax3) = plt.subplots(1,3)
@@ -864,7 +863,7 @@ class Pink(Base):
                 # plt.show() will block, but fig.show() wont
                 plt.show()
 
-    def heatmap(self, binary=None, plot=False):
+    def heatmap(self, binary=None, plot=False, **kwargs):
         '''Using Pink, produce a heatmap of the input Binary instance. 
         Note that by default the Binary instance attached to self.binary will be used. 
 
@@ -874,6 +873,8 @@ class Pink(Base):
         plot - bool
              Make an initial diagnostic plot of the SOM and the correponding heatmap.
              This will show the first source of the binary object
+        kwargs - dict
+             Additional parameters passed directly to _process_heatmap()
         '''
         if binary is None:
             binary = self.binary
@@ -892,7 +893,7 @@ class Pink(Base):
             if not os.path.exists(self.heat_path):
                 subprocess.run(exec_str.split())
                 self.heat_hash = get_hash(self.heat_path)
-            self._process_heatmap(plot=plot, binary=binary)
+            self._process_heatmap(plot=plot, binary=binary, **kwargs)
         else:
             print('PINK can not be found on this system...')
 
@@ -905,11 +906,11 @@ if __name__ == '__main__':
 
         print(load_pink)
 
-        load_pink.heatmap(plot=True)
+        load_pink.heatmap(plot=True, image_number=0)
 
     elif '-p' in sys.argv:
-        # for i in ['default_sig_norm_chan.binary', 'default_sig_chan.binary', 'default.binary', 'default_sig.binary', 'default_norm.binary', 'default_sig_norm.binary']:
-        for i in ['default_sig_norm.binary']:
+        for i in ['default_sig_norm_chan.binary', 'default_sig_chan.binary', 'default.binary', 'default_sig.binary', 'default_norm.binary', 'default_sig_norm.binary']:
+        # for i in ['default_sig_norm.binary']:
             load_binary = Binary.loader(i)
 
             print('Printing the loaded binary...')
