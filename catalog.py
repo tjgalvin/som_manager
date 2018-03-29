@@ -17,7 +17,6 @@ import matplotlib.pyplot as plt
 
 from tqdm import tqdm
 from collections import defaultdict
-# from source import Source
 from astropy.table import Table
 from astropy.io import fits as pyfits
 from astropy.coordinates import SkyCoord
@@ -32,7 +31,7 @@ from astropy.utils.exceptions import AstropyWarning
 warnings.simplefilter('ignore', category=AstropyWarning)
 
 def chunk_sources(l, chunk_length):
-    '''Function to yield a smaller subset of the self.sources() attribute
+    '''Function to yield a smaller subset of the passed iterable `l`
     so that Dask does not take forever building the work graph
     
     l - list or list like
@@ -576,7 +575,7 @@ class Catalog(Base):
             sub_sources = [down(s) for s in sub_sources]
             sub_sources = [val(s) for s in sub_sources]
             with ProgressBar():
-                results += reduce(sub_sources).compute(num_workers=150)
+                results += reduce(sub_sources).compute(num_workers=20)
 
         self.sources = results
 
@@ -720,6 +719,7 @@ class Pink(Base):
         # Items for the Heatmap
         self.heat_path = f'{self.binary.binary_path}.heat'
         self.heat_hash = ''
+        self.src_heatmap = None
 
     def update_pink_args(self, **kwargs):
         '''Helper function to update pink arguments that may not have been included
@@ -983,7 +983,7 @@ if __name__ == '__main__':
 
         print(load_pink)
 
-        load_pink.heatmap(plot=False, image_number=0, apply=True)
+        load_pink.heatmap(plot=True, image_number=0, apply=True)
         load_pink.attribute_heatmap(plot=True, label='RMS')
 
     elif '-p' in sys.argv:
@@ -994,8 +994,8 @@ if __name__ == '__main__':
             print('Printing the loaded binary...')
             print(load_binary)
 
-            pink = Pink(load_binary, pink_args={'som-width':6,
-                                                'som-height':6})  
+            pink = Pink(load_binary, pink_args={'som-width':12,
+                                                'som-height':12})  
             print(pink)
             print('\n')
 
@@ -1003,12 +1003,12 @@ if __name__ == '__main__':
 
             print('\n')
             print(pink)
-            pink.show_som(channel=0)
-            pink.show_som(channel=1)
+            # pink.show_som(channel=0)
+            # pink.show_som(channel=1)
             pink.save(i.replace('binary', 'Pink'))
 
     elif '-c' in sys.argv:
-        cat = Catalog(catalog='./first_14dec17.fits.gz', step=5)
+        cat = Catalog(catalog='./first_14dec17.fits.gz', step=250)
         print(cat)
 
         cat.download_validate_images()
