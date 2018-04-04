@@ -324,7 +324,9 @@ class Source(Base):
         path = f"{out_dir}/{self.filename}".replace('.png','.npy')
         make_dir(out_dir)
 
+        # Convert image to grey scale and dump it in the _Common path
         img = np.array(Image.open(first_path).convert('L'))
+        s1 = img.shape
         with open(path, 'wb') as out:
             np.save(out, img.astype('f'))
             self.common_images['FIRST'] = path
@@ -333,16 +335,23 @@ class Source(Base):
         if not os.path.exists(wise_path):
             self.common_images['WISE_W1'] = 'ERROR'
             return
-            
+
         out_dir = f"{self.out}/WISE_W1_Common"
         path = f"{out_dir}/{self.filename}".replace('.png','.npy')
         make_dir(out_dir)
 
+        # Convert image to grey scale and dump it in the _Common path
         img = np.array(Image.open(wise_path).convert('L'))
+        s2 = img.shape
         with open(path, 'wb') as out:
             np.save(out, img.astype('f'))
             self.common_images['WISE_W1'] = path
 
+        # The images do not have the same sizes...
+        if s1 != s2:
+            return
+
+        self.common_shape = s1
         self.valid = True
     # ----------------------------------------------------------------    
 
@@ -619,7 +628,7 @@ class Catalog(Base):
         print(f'Globbing for files with: {scan_str}')
         files = glob.glob(scan_str)
 
-        print(f'Locationed {len(files)} files...')
+        print(f'Located {len(files)} files...')
 
         for f in tqdm(files):
             self.sources.append(Source(self.out_dir, rgz_path=f))
@@ -681,7 +690,8 @@ class Catalog(Base):
 
         for s in tqdm(self.sources):
             if s.filename is not None:
-                with open(f"{path}/{s.filename.replace('.fits','.pkl')}", 'wb') as out_file:
+                # Dirty dirty str replace
+                with open(f"{path}/{s.filename.replace('.png','.pkl').replace('.fits','.pkl')}", 'wb') as out_file:
                     pickle.dump(s, out_file, protocol=3)
 
     def reproject_valid_sources(self, master='FIRST', chunk_length=3000):
@@ -1065,6 +1075,13 @@ if __name__ == '__main__':
         rgz_dir = '/Users/tim/Documents/Postdoc_Work/rgz_rcnn/data'
 
         cat = Catalog(rgz_dir=rgz_dir)
+
+        cat.save_sources()
+        cat.collect_valid_sources()
+
+        test_bin = cat.dump_binary('TEST.binary')
+
+        print(test_bin)
 
     elif '-m' in sys.argv:
         pink_file = 'default_sig_chan.Pink'
