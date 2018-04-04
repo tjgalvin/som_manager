@@ -15,6 +15,7 @@ import reproject as rp
 import astropy.units as u
 import matplotlib.pyplot as plt
 
+from PIL import Image
 from tqdm import tqdm
 from collections import defaultdict
 from astropy.table import Table
@@ -113,18 +114,26 @@ class Source(Base):
 
         return out
 
-    def __init__(self, position, out_dir, cutout_size=5., info=None):
+    def __init__(self, out_dir, rgz_path=None, position=None, cutout_size=5., info=None):
         '''Accept the parameters of this particular source
 
-        position - astropy.coordinates.SkyCoord
-                The RA/DEC position of a source
         out_dir - str
                 The root output directory used for writing to
+        rgz_path - str
+                The path to the file to load in if data are being using from the RGZ dataset
+                downloaded using the rgz_cnn download_data.py script from Chen Wu (UWA)
+        position - astropy.coordinates.SkyCoord or None
+                The RA/DEC position of a source to be used if data are to be
+                dowloaded
         cutout_size - float
-               The size of postage stamps in arcminutes
+               The size of postage stamps in arcminutes if data are to be downloaded
         info - any
              A dictionary like object for future bookkeeping
         '''
+        if rgz_path is None and position is None:
+            raise ValueError('No valid Source mode has been set')
+
+        self.rgz_path = rgz_path
         self.pos = position
         self.out = out_dir
         self.cutout_size = cutout_size
@@ -138,6 +147,12 @@ class Source(Base):
         self.common_images = {}
         self.common_shape = (0,0)
 
+        if self.rgz_path is not None:
+            self.load_rgz_images()
+
+    # ----------------------------------------------------------------
+    # Functions to load and reproject images
+    # ----------------------------------------------------------------    
     def _first(self, pad=0.):
         '''Download the postage stamp from the FIRST catalog service
 
@@ -285,6 +300,51 @@ class Source(Base):
             with open(path, 'wb') as out:
                 np.save(out, v.astype('f'))
                 self.common_images[k] = path
+    # ----------------------------------------------------------------    
+
+    # ----------------------------------------------------------------    
+    # Function to load in data from RGZ
+    # ----------------------------------------------------------------    
+    def load_rgz_images(self):
+        '''Given the image path from the intialisation of this Source instance
+        attempt to load in the saved RGZ images using the data directory structure
+        from the download_data.py script. 
+
+        Since these images are (1) PNGs, and (2) already reprojected, we will load them
+        in, convert them to greyscale, and place them into the COMMON images folder. Since
+        we are following a `hardcoded` directory structure, the keys to the self.common_images
+        dict will be `FIRST` and `WISE_W1`.
+        '''
+        self.valid = False
+        # Load in the FIRST Dataset
+        first_path = self.rgz_path
+        self.filename = first_path.split('/')[-1]
+        
+        out_dir = f"{self.out}/FIRST_Common"
+        path = f"{out_dir}/{self.filename}".replace('.png','.npy')
+        make_dir(out_dir)
+
+        img = np.array(Image.open(first_path).convert('L'))
+        with open(path, 'wb') as out:
+            np.save(out, img.astype('f'))
+            self.common_images['FIRST'] = path
+
+        wise_path = first_path.replace('_logminmax','_infraredct')
+        if not os.path.exists(wise_path):
+            self.common_images['WISE_W1'] = 'ERROR'
+            return
+            
+        out_dir = f"{self.out}/WISE_W1_Common"
+        path = f"{out_dir}/{self.filename}".replace('.png','.npy')
+        make_dir(out_dir)
+
+        img = np.array(Image.open(wise_path).convert('L'))
+        with open(path, 'wb') as out:
+            np.save(out, img.astype('f'))
+            self.common_images['WISE_W1'] = path
+
+        self.valid = True
+    # ----------------------------------------------------------------    
 
     def _valid(self, nan_fail=True, shape_fail=True, zero_fail=True):
         '''Internal method to actually run the validation checker and 
@@ -496,10 +556,13 @@ class Catalog(Base):
         '''
         return self.__str__()
 
-    def __init__(self, catalog=None, out_dir='Images', sources_dir='Sources',
-                       scan_sources=True, step=1000):
+    def __init__(self, rgz_dir=None, catalog=None, out_dir='Images', 
+                       sources_dir='Sources', scan_sources=True, step=1000):
         '''Accept the name of a catalogue and read it in
 
+        rgz_dir - str or None
+                Directory of data downloaded from the RGZ using Chen Wu dowload_data.py script
+                https://github.com/chenwuperth/rgz_rcnn/blob/master/tools/download_data.py#L30
         catalog - str
                The name of the catalogue file to attempt to load in
         out_dir - str
@@ -517,9 +580,10 @@ class Catalog(Base):
         self.sources = []
         self.valid_sources = None
 
-        # Two options:
+        # Three options:
         #     - Scan the Sources folder (Images/Sources) assuming images are downloaded
         #     - No Sources to load and need to download them
+        #     - Data has been downloaded from Chen Wu rgz_rcnn package and needs to be processed
         # Option one would be most preferred to avoid the downloading, so lets attempt
         # to load those in, and then form the catalog and valid sources, otherwise 
         # attempt to load in the catalog again
@@ -536,8 +600,29 @@ class Catalog(Base):
             self.tab = Table.read(catalog)[::step].to_pandas()
             self._gen_sources()
 
+        elif rgz_dir is not None and os.path.exists(rgz_dir):
+            self.catalog = rgz_dir
+            self.tab = None
+            self._scan_rgz()
+
         else:
             raise ValueError
+
+    def _scan_rgz(self):
+        '''Function to attempt to read in data downloaded from RGZ, assuming the 
+        folder structure from the rgz_rcnn download_data.py script from Chen Wu
+        '''
+        rgz_dir = self.catalog
+        print(f'The RGZ directory is: {rgz_dir}')
+
+        scan_str = f'{rgz_dir}/RGZdevkit2017/RGZ2017/PNGImages/*_logminmax.png'
+        print(f'Globbing for files with: {scan_str}')
+        files = glob.glob(scan_str)
+
+        print(f'Locationed {len(files)} files...')
+
+        for f in tqdm(files):
+            self.sources.append(Source(self.out_dir, rgz_path=f))
 
     def _gen_sources(self):
         '''Generate the Source objects
@@ -976,7 +1061,12 @@ class Pink(Base):
 
 if __name__ == '__main__':
 
-    if '-h' in sys.argv:
+    if '-r' in sys.argv:
+        rgz_dir = '/Users/tim/Documents/Postdoc_Work/rgz_rcnn/data'
+
+        cat = Catalog(rgz_dir=rgz_dir)
+
+    elif '-m' in sys.argv:
         pink_file = 'default_sig_chan.Pink'
         print(f'Loading in {pink_file}')
         load_pink = Pink.loader(pink_file)
@@ -1062,7 +1152,8 @@ if __name__ == '__main__':
     
     else:
         print('Options:')
+        print(' -r : Run test code to scan in RGZ image data')
         print(' -s : Run test code for Source class')
         print(' -c : Run test code for Catalogue class')
         print(' -p : Run test code for the Pink class')
-        print(' -h : Run the heatmap code for a trained Pink model')
+        print(' -m : Run the heatmap code for a trained Pink model')
