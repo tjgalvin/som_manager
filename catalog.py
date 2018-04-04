@@ -1072,7 +1072,7 @@ class Pink(Base):
 if __name__ == '__main__':
 
     if '-r' in sys.argv:
-        rgz_dir = '/Users/tim/Documents/Postdoc_Work/rgz_rcnn/data'
+        rgz_dir = 'rgz_rcnn_data'
 
         cat = Catalog(rgz_dir=rgz_dir)
 
@@ -1080,6 +1080,7 @@ if __name__ == '__main__':
         cat.collect_valid_sources()
 
         test_bin = cat.dump_binary('TEST.binary')
+        test_bin = cat.dump_binary('TEST.binary', channels=['FIRST','WISE_W1'])
 
         print(test_bin)
 
