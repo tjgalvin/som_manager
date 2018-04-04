@@ -950,10 +950,10 @@ class Pink(Base):
             data = np.ndarray([SOM_width, SOM_height, SOM_depth], 'float', array)
             data = np.swapaxes(data, 0, 2)
             data = np.reshape(data, (image_height, image_width))
-            data = data[::-1] # Apprently the first axis is out of order when you
+            # data = data[::-1] # Apprently the first axis is out of order when you
                               # plot it agaisnt the proper SOM and an the corresponding
                               # source
-
+            data /= data.sum()
             # Simple diagnostic plot
             if plot:
                 fig, (ax1, ax2, ax3) = plt.subplots(1,3)
@@ -1079,10 +1079,19 @@ if __name__ == '__main__':
         cat.save_sources()
         cat.collect_valid_sources()
 
-        test_bin = cat.dump_binary('TEST.binary')
-        test_bin = cat.dump_binary('TEST.binary', channels=['FIRST','WISE_W1'])
+        test_bin = cat.dump_binary('TEST.binary', norm=True)
+        # test_bin = cat.dump_binary('TEST.binary', channels=['FIRST','WISE_W1'])
 
         print(test_bin)
+
+        pink = Pink(test_bin, pink_args={'som-width':6,
+                                         'som-height':6}) 
+
+        pink.train()
+        pink.save('TEST.pink')
+        pink.heatmap(plot=True, image_number=0, apply=True)
+        pink.heatmap(plot=True, image_number=500, apply=True)
+        
 
     elif '-m' in sys.argv:
         pink_file = 'default_sig_chan.Pink'
