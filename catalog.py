@@ -326,7 +326,12 @@ class Source(Base):
 
         # Convert image to grey scale and dump it in the _Common path
         img = np.array(Image.open(first_path).convert('L'))
+        img = img[3:-3, 3:-3] # Clip out pixels that may have used to pad reprojection
         s1 = img.shape
+        if np.any(~np.isfinite(img)):
+            print(f'Dropping RGZ FIRST image {self.filename}')
+            return
+
         with open(path, 'wb') as out:
             np.save(out, img.astype('f'))
             self.common_images['FIRST'] = path
@@ -342,7 +347,12 @@ class Source(Base):
 
         # Convert image to grey scale and dump it in the _Common path
         img = np.array(Image.open(wise_path).convert('L'))
+        img = img[3:-3, 3:-3] # Clip out pixels that may have used to pad reprojection
         s2 = img.shape
+        if np.any(~np.isfinite(img)):
+            print(f'Dropping RGZ WISE image {self.filename}')
+            return
+        
         with open(path, 'wb') as out:
             np.save(out, img.astype('f'))
             self.common_images['WISE_W1'] = path
@@ -350,7 +360,7 @@ class Source(Base):
         # The images do not have the same sizes...
         if s1 != s2:
             return
-
+        
         self.common_shape = s1
         self.valid = True
     # ----------------------------------------------------------------    
@@ -406,6 +416,12 @@ class Source(Base):
         std - float
              The clipping level to be used
         '''
+        # Flag out NaNs and other badness...
+        mask = np.isfinite(data)
+        data[~mask] = 0.
+
+        # ... so that this works. Otherwise the SOM will
+        # come out empty
         mask = data < std*data.std()
         data[mask] = 0.
         return data
@@ -432,33 +448,24 @@ class Source(Base):
              data. If float, then 
         '''
         if order is None:
-            for img in self.common_images.values():
-                with open(img, 'rb') as in_file:
-                    data = np.load(in_file)
-                    if isinstance(sigma, float):
-                        data = self.sigma_clip(data, std=sigma)
-                    if norm:
-                        data = self.normalise(data)
+            order = self.common_images.keys()
 
-                    if of is None:
-                        return data.astype('float')
-                    else:
-                        data.astype('f').tofile(of)
-        else:
-            for item in order:
-                if item not in self.common_images.keys():
-                    raise ValueError
-                with open(self.common_images[item], 'rb') as in_file:
-                    data = np.load(in_file)
-                    if isinstance(sigma, float):
-                        data = self.sigma_clip(data, std=sigma)
-                    if norm:
-                        data = self.normalise(data)
+        for item in order:
+            if item not in self.common_images.keys():
+                raise ValueError
+            img = self.common_images[item]
+            with open(img, 'rb') as in_file:
+                data = np.load(in_file)
+                if norm:
+                    data = self.normalise(data)
+                if isinstance(sigma, float):
+                    data = self.sigma_clip(data, std=sigma)
+                
+                if of is None:
+                    return data.astype('float')
+                else:
+                    data.astype('f').tofile(of)
 
-                    if of is None:
-                        return data
-                    else:
-                        data.astype('f').tofile(of)
 
     def show_reprojected(self):
         '''Quick function to look at each of the 
@@ -938,13 +945,26 @@ class Pink(Base):
         '''
         if binary is None:
             binary = self.binary
-            
+        
+        # I have modified the original version of PINK to also output
+        # the transform information. Extract here if it exisists
+        transform = f'{self.heat_path}.Transform'
+        if os.path.exists(transform):
+            with open(transform) as in_file:
+                numberOfImages = struct.unpack('i', in_file.read(4))
+                in_file.seek(image_number * 8 + 4, 1)
+                angle = struct.unpack('f', 4)
+                flipped = struct.unpack('i', 4)
+                print(f'Angle, is_flipped: {angle} {flipped}')
+
         with open(self.heat_path, 'rb') as in_file:
             numberOfImages, SOM_width, SOM_height, SOM_depth = struct.unpack('i' * 4, in_file.read(4*4))
             
             size = SOM_width * SOM_height * SOM_depth
             image_width = SOM_width
             image_height = SOM_depth * SOM_height
+
+            # Seek the image number here
             in_file.seek(image_number * size * 4, 1)
             array = np.array(struct.unpack('f' * size, in_file.read(size * 4)))
             data = np.ndarray([SOM_width, SOM_height, SOM_depth], 'float', array)
@@ -963,8 +983,11 @@ class Pink(Base):
                 (som, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height) = params
 
                 source_img = binary.get_image(image_number)
+                loc = np.unravel_index(np.argmin(data, axis=None), data.shape)
 
                 ax1.imshow(data)
+                ax1.plot(loc[0], loc[1],'ro')
+
                 ax2.imshow(som)
                 ax3.imshow(source_img)
 
@@ -1089,8 +1112,8 @@ if __name__ == '__main__':
 
         pink.train()
         pink.save('TEST.pink')
-        pink.heatmap(plot=True, image_number=0, apply=True)
-        pink.heatmap(plot=True, image_number=500, apply=True)
+        pink.heatmap(plot=True, image_number=0, apply=False)
+        pink.heatmap(plot=True, image_number=500, apply=False)
         
 
     elif '-m' in sys.argv:
