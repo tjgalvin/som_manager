@@ -1063,7 +1063,7 @@ class Pink(Base):
         book = defaultdict(list)
 
         for heat, item in zip(self.src_heatmap, items):
-            loc = np.unravel_index(np.argmax(heat, axis=None), heat.shape)
+            loc = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
             book[loc].append(item)
 
         if plot:
