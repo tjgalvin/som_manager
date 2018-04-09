@@ -466,7 +466,6 @@ class Source(Base):
                 else:
                     data.astype('f').tofile(of)
 
-
     def show_reprojected(self):
         '''Quick function to look at each of the 
         '''
@@ -645,7 +644,7 @@ class Catalog(Base):
         '''
         print('Generating the Sources....')
         for index, r in tqdm(self.tab.iterrows()):
-            self.sources.append(Source(SkyCoord(ra=r['RA']*u.deg, dec=r['DEC']*u.deg), self.out_dir, info=r) )
+            self.sources.append(Source(self.out_dir, position=SkyCoord(ra=r['RA']*u.deg, dec=r['DEC']*u.deg), info=r) )
 
     def download_validate_images(self, chunk_length=3000):
         '''Kick off the download_images and is_valid method of each of the 
@@ -948,14 +947,32 @@ class Pink(Base):
         
         # I have modified the original version of PINK to also output
         # the transform information. Extract here if it exisists
-        transform = f'{self.heat_path}.Transform'
+        transform = f'{self.heat_path}.transform'
         if os.path.exists(transform):
-            with open(transform) as in_file:
-                numberOfImages = struct.unpack('i', in_file.read(4))
-                in_file.seek(image_number * 8 + 4, 1)
-                angle = struct.unpack('f', 4)
-                flipped = struct.unpack('i', 4)
-                print(f'Angle, is_flipped: {angle} {flipped}')
+            with open(transform, 'rb') as in_file:
+                (numberOfImages, width, height, depth) = struct.unpack('i'*4, in_file.read(4*4))
+                som_size = width * height * depth
+                image_width = width
+                image_height = height * depth
+
+                in_file.seek(image_number * 8 * som_size + 4*4)
+                transform_map = struct.unpack('fi' * som_size, in_file.read(4*2*som_size))
+                # print(transform_map)
+                angle = np.array(transform_map[::2])
+                flipped = np.array(transform_map[1::2])
+                # print(angle.shape)
+                angle = np.ndarray([width, height, depth], 'float', angle)
+                angle = np.swapaxes(angle, 0, 2)
+                angle = np.reshape(angle, (image_height, image_width))
+                # print(angle.shape)
+                # print(flipped.shape)
+                flipped = np.ndarray([width, height, depth], 'int', flipped)
+                flipped = np.swapaxes(flipped, 0, 2)
+                flipped = np.reshape(flipped, (image_height, image_width))
+                # print(flipped.shape)
+
+        else:
+            angle, flipped = None, None
 
         with open(self.heat_path, 'rb') as in_file:
             numberOfImages, SOM_width, SOM_height, SOM_depth = struct.unpack('i' * 4, in_file.read(4*4))
@@ -970,27 +987,82 @@ class Pink(Base):
             data = np.ndarray([SOM_width, SOM_height, SOM_depth], 'float', array)
             data = np.swapaxes(data, 0, 2)
             data = np.reshape(data, (image_height, image_width))
-            # data = data[::-1] # Apprently the first axis is out of order when you
-                              # plot it agaisnt the proper SOM and an the corresponding
-                              # source
-            data /= data.sum()
+
+            # data /= data.sum()
             # Simple diagnostic plot
             if plot:
-                fig, (ax1, ax2, ax3) = plt.subplots(1,3)
+                # fig, (ax1, ax2, ax3, ax4) = plt.subplots(1,4)
+                fig, ax = plt.subplots(3,3)
                 params = self.retrieve_som_data(channel=channel)
                 if params is None:
                     return
                 (som, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height) = params
 
-                source_img = binary.get_image(image_number)
+                src_img = binary.get_image(image_number)
                 loc = np.unravel_index(np.argmin(data, axis=None), data.shape)
+                
+                where = np.where(data==data.min())
+                loc2 = (where[0][0], where[1][0])
 
-                ax1.imshow(data)
-                ax1.plot(loc[0], loc[1],'ro')
+                ax[0,0].imshow(data)
+                ax[0,0].plot(loc2[0], loc2[1],'ro')
+                ax[0,0].plot(loc2[1], loc2[0],'b^')
+                ax[0,0].set(title='Euclidean Distance (Heatmap)')
 
-                ax2.imshow(som)
-                ax3.imshow(source_img)
+                ax[0,1].imshow(som)
+                ax[0,1].set(title='Trained SOM')
 
+                ax[0,2].imshow(src_img)
+                ax[0,2].set(title='Source Image')
+            
+                if angle is not None:
+                    ang = np.rad2deg(angle[loc[0], loc[1]])
+                    flip = flipped[loc[0], loc[1]]
+                    
+                    # TODO: This will fail if the data have not been
+                    # normalised...
+                    img = Image.fromarray((src_img*255).astype(np.uint8), mode='L')
+                    
+                    img = img.rotate(-ang)
+                    if flip == 1:
+                        print('\tFlipping')
+                        img = img.transpose(Image.FLIP_TOP_BOTTOM)
+                        # img = img.transpose(Image.FLIP_LEFT_RIGHT)
+
+                    ax[1,2].imshow(np.array(img))
+                    ax[1,2].set(title=f'Rotation: {ang:.1f}, Flipped: {flip}')
+
+                    x, y = loc
+                    winning_neuron = som[y*neuron_width:(y+1)*neuron_width,
+                                         x*neuron_width:(x+1)*neuron_width]
+                    ax[1,1].imshow(winning_neuron)
+                    ax[1,1].set(title='Red Marker')
+
+                    y,x = x,y 
+                    winning_neuron = som[y*neuron_width:(y+1)*neuron_width,
+                                         x*neuron_width:(x+1)*neuron_width]
+                    ax[1,0].imshow(winning_neuron)
+                    ax[1,0].set(title='Blue Marker')
+
+                    ax[2,0].imshow(np.rad2deg(angle))
+                    ax[2,0].plot(loc[0], loc[1],'ro')
+                    ax[2,0].plot(loc[1], loc[0],'b^')
+                    ax[2,0].set(title='Rotation')
+
+                    ax[2,1].imshow(flipped)
+                    ax[2,1].plot(loc[0], loc[1],'ro')
+                    ax[2,1].plot(loc[1], loc[0],'b^')
+                    ax[2,1].set(title='Flipped Bit')
+
+                    print(angle.shape, flipped.shape, data.shape)
+                    print(angle[loc2[1],loc2[0]], np.rad2deg(angle[loc2[1],loc2[0]]), loc2 )
+
+                else:
+                    fig.delaxes(ax[1,2])
+                    fig.delaxes(ax[1,1])
+                    fig.delaxes(ax[1,0])
+                
+                fig.delaxes(ax[2,2])
                 # plt.show() will block, but fig.show() wont
                 plt.show()
             
@@ -1031,7 +1103,7 @@ class Pink(Base):
             raise ValueError(f'The hash checked failed for {self.binary.binary_path}')
 
         pink_avail = True if shutil.which('Pink') is not None else False        
-        exec_str = f'Pink --map {self.binary.binary_path} {self.heat_path} {self.SOM_path} '
+        exec_str = f'Pink --cuda-off --map {self.binary.binary_path} {self.heat_path} {self.SOM_path} '
         exec_str += ' '.join(f'--{k}={v}' for k,v in self.pink_args.items())
         
         if pink_avail:
@@ -1102,20 +1174,37 @@ if __name__ == '__main__':
         cat.save_sources()
         cat.collect_valid_sources()
 
-        test_bin = cat.dump_binary('TEST.binary', norm=True)
+        test_bin = cat.dump_binary('TEST.binary', norm=True, sigma=3.)
         # test_bin = cat.dump_binary('TEST.binary', channels=['FIRST','WISE_W1'])
 
         print(test_bin)
 
-        pink = Pink(test_bin, pink_args={'som-width':6,
-                                         'som-height':6}) 
+        pink = Pink(test_bin, pink_args={'som-width':12,
+                                         'som-height':12}) 
 
         pink.train()
         pink.save('TEST.pink')
         pink.heatmap(plot=True, image_number=0, apply=False)
         pink.heatmap(plot=True, image_number=500, apply=False)
         
+    elif '-t' in sys.argv:
+        pink = Pink.loader('TEST.pink')
+        src = len(pink.binary.sources)
 
+        pink.heatmap(plot=True, image_number=60, apply=False)
+        pink.heatmap(plot=True, image_number=61, apply=False)
+        pink.heatmap(plot=True, image_number=62, apply=False)
+        pink.heatmap(plot=True, image_number=63, apply=False)
+        pink.heatmap(plot=True, image_number=64, apply=False)
+        pink.heatmap(plot=True, image_number=65, apply=False)
+
+        # pink.heatmap(plot=True, image_number=src-1, apply=False)
+        # pink.heatmap(plot=True, image_number=500, apply=False)
+        # pink.heatmap(plot=True, image_number=100, apply=False)
+        # pink.heatmap(plot=True, image_number=300, apply=False)
+        # pink.heatmap(plot=True, image_number=400, apply=False)
+        # pink.heatmap(plot=True, image_number=450, apply=False)
+        
     elif '-m' in sys.argv:
         pink_file = 'default_sig_chan.Pink'
         print(f'Loading in {pink_file}')
@@ -1203,6 +1292,7 @@ if __name__ == '__main__':
     else:
         print('Options:')
         print(' -r : Run test code to scan in RGZ image data')
+        print(' -t : Run test code for the Transform outputs and heatmap')
         print(' -s : Run test code for Source class')
         print(' -c : Run test code for Catalogue class')
         print(' -p : Run test code for the Pink class')
