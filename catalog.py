@@ -1172,7 +1172,6 @@ class Pink(Base):
         for k, v in book.items():
             # Flatten the list out. The RGZ annotations can be comprised of 
             # multiple objects. For the moment, flatten. them. out. 
-            v = [i for item in v for i in item]
             if min(v) < vmin:
                 vmin = min(v)
             if max(v) > vmax:
@@ -1182,7 +1181,6 @@ class Pink(Base):
         fig, ax = plt.subplots(nrows=shape[0], ncols=shape[1])
 
         for k, v in book.items():
-            print(k, len(v))
             ax[k].hist(v, bins=bins)
 
         plt.show()
@@ -1224,7 +1222,6 @@ class Pink(Base):
                       tick_label=unique_labels)
 
         plt.show()
-
 
     def attribute_plot(self, book, shape):
         '''Produce a grid of histograms based on the list of items inside it
@@ -1354,12 +1351,21 @@ if __name__ == '__main__':
         pink.heatmap(plot=False, apply=True)
 
         def source_rgz(s):
+            l = str(s.rgz_annotations()['number'])
+            if l is None:
+                return ''
+            else:
+                return l
+        pink.attribute_heatmap(func=source_rgz)
+
+        def source_rgz(s):
             l = s.rgz_annotations()['names']
             if l is None:
                 return ''
             else:
                 return l
         pink.attribute_heatmap(func=source_rgz)
+
         # pink.count_map(plot=True)
 
         # for i in tqdm(range(10, 100)):
