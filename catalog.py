@@ -926,7 +926,7 @@ class Pink(Base):
                         f'Channel: {channel}'))
         fig.savefig(f'{self.SOM_path}-ch_{channel}.pdf')
 
-    def _process_heatmap(self, image_number=0, plot=False, channel=0, binary=None):
+    def _process_heatmap(self, image_number=0, plot=False, channel=0, binary=None, save=None):
         '''Function to process the heatmap file produced by the `--map`
         option in the Pink utility
 
@@ -941,6 +941,9 @@ class Pink(Base):
                An instance of the Binary class to manage a binary image file
                from which a source image will be pulled from. if none, revert
                to the one contained in this instance
+        save - None or str
+               If None plot the window, otherwise save the figure to the path
+               set by save
         '''
         if binary is None:
             binary = self.binary
@@ -957,19 +960,14 @@ class Pink(Base):
 
                 in_file.seek(image_number * 8 * som_size + 4*4)
                 transform_map = struct.unpack('fi' * som_size, in_file.read(4*2*som_size))
-                # print(transform_map)
                 angle = np.array(transform_map[::2])
                 flipped = np.array(transform_map[1::2])
-                # print(angle.shape)
                 angle = np.ndarray([width, height, depth], 'float', angle)
                 angle = np.swapaxes(angle, 0, 2)
                 angle = np.reshape(angle, (image_height, image_width))
-                # print(angle.shape)
-                # print(flipped.shape)
                 flipped = np.ndarray([width, height, depth], 'int', flipped)
                 flipped = np.swapaxes(flipped, 0, 2)
                 flipped = np.reshape(flipped, (image_height, image_width))
-                # print(flipped.shape)
 
         else:
             angle, flipped = None, None
@@ -1025,7 +1023,7 @@ class Pink(Base):
                     
                     img = img.rotate(-ang)
                     if flip == 1:
-                        print('\tFlipping')
+                        # print('\tFlipping')
                         img = img.transpose(Image.FLIP_TOP_BOTTOM)
                         # img = img.transpose(Image.FLIP_LEFT_RIGHT)
 
@@ -1054,8 +1052,8 @@ class Pink(Base):
                     ax[2,1].plot(loc[1], loc[0],'b^')
                     ax[2,1].set(title='Flipped Bit')
 
-                    print(angle.shape, flipped.shape, data.shape)
-                    print(angle[loc2[1],loc2[0]], np.rad2deg(angle[loc2[1],loc2[0]]), loc2 )
+                    # print(angle.shape, flipped.shape, data.shape)
+                    # print(angle[loc2[1],loc2[0]], np.rad2deg(angle[loc2[1],loc2[0]]), loc2 )
 
                 else:
                     fig.delaxes(ax[1,2])
@@ -1064,8 +1062,12 @@ class Pink(Base):
                 
                 fig.delaxes(ax[2,2])
                 # plt.show() will block, but fig.show() wont
-                plt.show()
-            
+                if save is None:
+                    plt.show()
+                else:
+                    plt.savefig(save)
+
+                plt.close(fig)
             return data
 
     def _apply_heatmap(self):
@@ -1164,6 +1166,57 @@ class Pink(Base):
         if plot:
             self.attribute_plot(book, shape)
 
+    def count_map(self, plot=False):
+        '''Produce a map of the number of images that best match each neuron. This
+        will have the same shape as the SOM grid, and the counts in each cell should
+        add to the number of images in the Binary file. For now, just use the heatmap
+        attached to this Pink instance.
+
+        plot - Bool
+            Produce a figure of the counts per neuron 
+        '''
+        shape = self.src_heatmap[0].shape
+        book = np.zeros(shape)
+
+        for heat in self.src_heatmap:
+            loc = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
+            book[loc] += 1           
+
+        # Diagnostic plot. Not meant to be final...
+        if plot:
+            from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+            params = self.retrieve_som_data(channel=0)
+            if params is None:
+                return
+            (data, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height) = params
+
+
+            fig, ax = plt.subplots(1,2)
+
+            im = ax[0].imshow(book)
+            ax[0].set(title='Counts per Neuron')
+            ax[0].xaxis.set(ticklabels=[])
+            ax[0].yaxis.set(ticklabels=[])
+            
+            divider = make_axes_locatable(ax[0])
+            cax0 = divider.append_axes('right', size='5%', pad=0.05)
+            fig.colorbar(im, cax=cax0, label='Counts')
+            # cax0.set(label='Counts')
+
+            im2 = ax[1].imshow(data)
+            ax[1].set(title='Trained SOM')
+            ax[1].xaxis.set(ticklabels=[])
+            ax[1].yaxis.set(ticklabels=[])
+            
+            divider = make_axes_locatable(ax[1])
+            cax1 = divider.append_axes('right', size='5%', pad=0.05)
+            fig.colorbar(im2, cax=cax1, label='Intensity')
+            
+            fig.tight_layout()
+            # fig.show()
+            plt.show()
+
 if __name__ == '__main__':
 
     if '-r' in sys.argv:
@@ -1179,8 +1232,8 @@ if __name__ == '__main__':
 
         print(test_bin)
 
-        pink = Pink(test_bin, pink_args={'som-width':12,
-                                         'som-height':12}) 
+        pink = Pink(test_bin, pink_args={'som-width':8,
+                                         'som-height':8}) 
 
         pink.train()
         pink.save('TEST.pink')
@@ -1191,12 +1244,24 @@ if __name__ == '__main__':
         pink = Pink.loader('TEST.pink')
         src = len(pink.binary.sources)
 
-        pink.heatmap(plot=True, image_number=60, apply=False)
-        pink.heatmap(plot=True, image_number=61, apply=False)
-        pink.heatmap(plot=True, image_number=62, apply=False)
-        pink.heatmap(plot=True, image_number=63, apply=False)
-        pink.heatmap(plot=True, image_number=64, apply=False)
-        pink.heatmap(plot=True, image_number=65, apply=False)
+        # pink.show_som()
+
+        plot_dir = 'Source_Heatmaps'
+        make_dir(plot_dir)
+
+        pink.heatmap(plot=False, apply=True)
+        pink.count_map(plot=True)
+
+        # for i in tqdm(range(10, 100)):
+        #     pink.heatmap(plot=True, image_number=i, apply=False)#, save=f'{plot_dir}/{i}_heatmap.pdf')
+            
+
+        # pink.heatmap(plot=True, image_number=60, apply=False)
+        # pink.heatmap(plot=True, image_number=61, apply=False)
+        # pink.heatmap(plot=True, image_number=62, apply=False)
+        # pink.heatmap(plot=True, image_number=63, apply=False)
+        # pink.heatmap(plot=True, image_number=64, apply=False)
+        # pink.heatmap(plot=True, image_number=65, apply=False)
 
         # pink.heatmap(plot=True, image_number=src-1, apply=False)
         # pink.heatmap(plot=True, image_number=500, apply=False)
