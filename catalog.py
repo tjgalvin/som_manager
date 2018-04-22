@@ -15,6 +15,8 @@ import reproject as rp
 import astropy.units as u
 import matplotlib.pyplot as plt
 
+from bs4 import BeautifulSoup
+
 from PIL import Image
 from tqdm import tqdm
 from collections import defaultdict
@@ -314,12 +316,19 @@ class Source(Base):
         in, convert them to greyscale, and place them into the COMMON images folder. Since
         we are following a `hardcoded` directory structure, the keys to the self.common_images
         dict will be `FIRST` and `WISE_W1`.
+
+        Attach the annotation file to the self.info structure for the moment. 
         '''
         self.valid = False
         # Load in the FIRST Dataset
         first_path = self.rgz_path
         self.filename = first_path.split('/')[-1]
         
+        xml = first_path.replace('PNGImages', 'Annotations').replace('.png', '.xml')
+        if os.path.exists(xml):
+            with open(xml, 'r') as xml_in:
+                self.info = BeautifulSoup(xml_in.read(), 'lxml')
+
         out_dir = f"{self.out}/FIRST_Common"
         path = f"{out_dir}/{self.filename}".replace('.png','.npy')
         make_dir(out_dir)
@@ -363,6 +372,27 @@ class Source(Base):
         
         self.common_shape = s1
         self.valid = True
+    
+    def rgz_annotations(self):
+        '''Return the object annotation information from the self.info
+        structure. if this is None, than the corresponding XML file was
+        not found when running self.load_rgz_image(). Return, as a list, 
+        the names of each of the components for now. 
+        '''
+        if self.info is None:
+            return None
+
+        components = {}
+        names = []
+        for obj in self.info.find_all('object'):
+            for n in obj.find('name'):
+                names.append(n)
+
+        # Place holder for future expansion
+        components['names'] = names
+        components['number'] = len(names)
+
+        return components
     # ----------------------------------------------------------------    
 
     def _valid(self, nan_fail=True, shape_fail=True, zero_fail=True):
@@ -545,14 +575,22 @@ class Binary(Base):
 
             return data
 
-    def get_data(self, label):
+    def get_data(self, label=None, func=None):
         '''Function to return some property from each of the attached self.sources
         objects
 
         label - str
              Name of the field in the self.sources object to retreive
+        func - Function
+            Some type of python callable to apply to an instance of Source
         '''
-        return [ s.info[label] for s in self.sources ]
+        if label is None and func is None:
+            raise ValueError('Label and Func can not both be None')
+
+        if func is None:
+            return [ s.info[label] for s in self.sources ]
+        else:
+            return [ func(s) for s in self.sources ] 
 
 class Catalog(Base):
     '''A class object to manage a catalogue and spawn corresponding Source
@@ -1118,19 +1156,23 @@ class Pink(Base):
         else:
             print('PINK can not be found on this system...')
 
-    def attribute_plot(self, book, shape):
-        '''Produce a grid of histograms based on the list of items inside it
-        
+    def _numeric_plot(self, book, shape):
+        '''Isolated function to plot the attribute histogram if the data is 
+        numeric in nature
+
         book - dict
             A dictionary whose keys are the location on the heatmap, and values
             are the list of values of sources who most belonged to that grid
         shape - tuple
             The shape of the grid. Should attempt to get this from the keys or
-            possible recreate it like in self.attribute_heatmap()
+            possible recreate it like in self.attribute_heatmap()        
         '''
         # Step one, get range
         vmin, vmax = np.inf, 0
         for k, v in book.items():
+            # Flatten the list out. The RGZ annotations can be comprised of 
+            # multiple objects. For the moment, flatten. them. out. 
+            v = [i for item in v for i in item]
             if min(v) < vmin:
                 vmin = min(v)
             if max(v) > vmax:
@@ -1145,7 +1187,63 @@ class Pink(Base):
 
         plt.show()
 
-    def attribute_heatmap(self, label='SIDEPROB', plot=True):
+    def _label_plot(self, book, shape):
+        '''Isolated function to plot the attribute histogram if the data is labelled in 
+        nature
+
+        book - dict
+            A dictionary whose keys are the location on the heatmap, and values
+            are the list of values of sources who most belonged to that grid
+        shape - tuple
+            The shape of the grid. Should attempt to get this from the keys or
+            possible recreate it like in self.attribute_heatmap()  
+        '''
+        # Step one, get unique items and their counts
+        from collections import Counter
+        unique_labels = []
+        for k, v in book.items():
+            v = [i for items in v for i in items]
+            c = Counter(v)
+            unique_labels.append(c.keys())
+
+        # Work out the unique labels and sort them so that each 
+        # sub pplot may be consistent
+        unique_labels = list(set([u for labels in unique_labels for u in labels]))
+        unique_labels.sort()
+
+        fig, ax = plt.subplots(nrows=shape[0], ncols=shape[1])
+
+        for k, v in book.items():
+            v = [i for items in v for i in items]
+            c = Counter(v)
+            
+            # ax[k].hist(v)
+            ax[k].bar(np.arange(len(unique_labels)),
+                      [c[l] for l in unique_labels],
+                      align='center',
+                      tick_label=unique_labels)
+
+        plt.show()
+
+
+    def attribute_plot(self, book, shape):
+        '''Produce a grid of histograms based on the list of items inside it
+        
+        book - dict
+            A dictionary whose keys are the location on the heatmap, and values
+            are the list of values of sources who most belonged to that grid
+        shape - tuple
+            The shape of the grid. Should attempt to get this from the keys or
+            possible recreate it like in self.attribute_heatmap()
+        '''
+        # Not covinced this is the best way to do it. Perhaps just a 
+        # try: -> except: ?
+        if isinstance(book[(0,0)][0], (int, float, complex)):
+            self._numeric_plot(book, shape)
+        else:
+            self._label_plot(book, shape)
+            
+    def attribute_heatmap(self, label=None, plot=True, func=None):
         '''Based on the most likely grid/best match in the heatmap for each source
         build up a distibution plot of each some label/parameters
 
@@ -1153,9 +1251,11 @@ class Pink(Base):
              The label/value to extract from each source
         plot - bool
              Plot the attribute heatmap/distribution
+        func - Function or callable
+             Function that may be applied to each of the instances of Source
         '''
         shape = self.src_heatmap[0].shape
-        items = self.binary.get_data(label)
+        items = self.binary.get_data(label=label, func=func)
 
         book = defaultdict(list)
 
@@ -1217,6 +1317,8 @@ class Pink(Base):
             # fig.show()
             plt.show()
 
+        return book
+
 if __name__ == '__main__':
 
     if '-r' in sys.argv:
@@ -1237,8 +1339,8 @@ if __name__ == '__main__':
 
         pink.train()
         pink.save('TEST.pink')
-        pink.heatmap(plot=True, image_number=0, apply=False)
-        pink.heatmap(plot=True, image_number=500, apply=False)
+        # pink.heatmap(plot=True, image_number=0, apply=False)
+        # pink.heatmap(plot=True, image_number=500, apply=False)
         
     elif '-t' in sys.argv:
         pink = Pink.loader('TEST.pink')
@@ -1250,7 +1352,15 @@ if __name__ == '__main__':
         make_dir(plot_dir)
 
         pink.heatmap(plot=False, apply=True)
-        pink.count_map(plot=True)
+
+        def source_rgz(s):
+            l = s.rgz_annotations()['names']
+            if l is None:
+                return ''
+            else:
+                return l
+        pink.attribute_heatmap(func=source_rgz)
+        # pink.count_map(plot=True)
 
         # for i in tqdm(range(10, 100)):
         #     pink.heatmap(plot=True, image_number=i, apply=False)#, save=f'{plot_dir}/{i}_heatmap.pdf')
