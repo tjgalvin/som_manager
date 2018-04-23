@@ -1156,7 +1156,7 @@ class Pink(Base):
         else:
             print('PINK can not be found on this system...')
 
-    def _numeric_plot(self, book, shape):
+    def _numeric_plot(self, book, shape, save=None):
         '''Isolated function to plot the attribute histogram if the data is 
         numeric in nature
 
@@ -1165,7 +1165,9 @@ class Pink(Base):
             are the list of values of sources who most belonged to that grid
         shape - tuple
             The shape of the grid. Should attempt to get this from the keys or
-            possible recreate it like in self.attribute_heatmap()        
+            possible recreate it like in self.attribute_heatmap()
+        save - None or Str
+            If None, show the figure on screen. Otherwise save to the path in save       
         '''
         # Step one, get range
         vmin, vmax = np.inf, 0
@@ -1183,9 +1185,12 @@ class Pink(Base):
         for k, v in book.items():
             ax[k].hist(v, bins=bins)
 
-        plt.show()
+        if save is None:
+            plt.show()
+        else:
+            plt.savefig(save)
 
-    def _label_plot(self, book, shape):
+    def _label_plot(self, book, shape, save=None, xtick_rotation=None):
         '''Isolated function to plot the attribute histogram if the data is labelled in 
         nature
 
@@ -1194,15 +1199,22 @@ class Pink(Base):
             are the list of values of sources who most belonged to that grid
         shape - tuple
             The shape of the grid. Should attempt to get this from the keys or
-            possible recreate it like in self.attribute_heatmap()  
+            possible recreate it like in self.attribute_heatmap() 
+        save - None or Str
+            If None, show the figure on screen. Otherwise save to the path in save
+        xtick_rotation - None or float
+            Will rotate the xlabel by rotation
         '''
         # Step one, get unique items and their counts
         from collections import Counter
         unique_labels = []
+        max_val = 0
         for k, v in book.items():
             v = [i for items in v for i in items]
             c = Counter(v)
             unique_labels.append(c.keys())
+            mv = max(c.values())
+            max_val = mv if mv > max_val else max_val
 
         # Work out the unique labels and sort them so that each 
         # sub pplot may be consistent
@@ -1214,16 +1226,28 @@ class Pink(Base):
         for k, v in book.items():
             v = [i for items in v for i in items]
             c = Counter(v)
-            
-            # ax[k].hist(v)
+            s = sum(c.values())
+
             ax[k].bar(np.arange(len(unique_labels)),
-                      [c[l] for l in unique_labels],
+                      [c[l]/s for l in unique_labels],
                       align='center',
                       tick_label=unique_labels)
+            ax[k].set(ylim=[0,1])
+            if k[1] != 0:
+                ax[k].set(yticklabels=[])
+            if k[0] != shape[1]-1:
+                ax[k].set(xticklabels=[])
+            else:
+                if xtick_rotation is not None:
+                    ax[k].tick_params(axis='x', rotation=xtick_rotation)
 
-        plt.show()
+        # fig.tight_layout()
+        if save is None:
+            plt.show()
+        else:
+            plt.savefig(save)
 
-    def attribute_plot(self, book, shape):
+    def attribute_plot(self, book, shape, *args, **kwargs):
         '''Produce a grid of histograms based on the list of items inside it
         
         book - dict
@@ -1236,11 +1260,11 @@ class Pink(Base):
         # Not covinced this is the best way to do it. Perhaps just a 
         # try: -> except: ?
         if isinstance(book[(0,0)][0], (int, float, complex)):
-            self._numeric_plot(book, shape)
+            self._numeric_plot(book, shape, **kwargs)
         else:
-            self._label_plot(book, shape)
+            self._label_plot(book, shape, **kwargs)
             
-    def attribute_heatmap(self, label=None, plot=True, func=None):
+    def attribute_heatmap(self, label=None, plot=True, func=None, *args, **kwargs):
         '''Based on the most likely grid/best match in the heatmap for each source
         build up a distibution plot of each some label/parameters
 
@@ -1261,16 +1285,19 @@ class Pink(Base):
             book[loc].append(item)
 
         if plot:
-            self.attribute_plot(book, shape)
+            self.attribute_plot(book, shape, **kwargs)
 
-    def count_map(self, plot=False):
+    def count_map(self, plot=False, save=None):
         '''Produce a map of the number of images that best match each neuron. This
         will have the same shape as the SOM grid, and the counts in each cell should
         add to the number of images in the Binary file. For now, just use the heatmap
         attached to this Pink instance.
 
         plot - Bool
-            Produce a figure of the counts per neuron 
+            Produce a figure of the counts per neuron
+        save - None or Str
+            If None, show the figure onscreen. Otherwise save it to the filename in 
+            save
         '''
         shape = self.src_heatmap[0].shape
         book = np.zeros(shape)
@@ -1312,7 +1339,10 @@ class Pink(Base):
             
             fig.tight_layout()
             # fig.show()
-            plt.show()
+            if save is None:
+                plt.show()
+            else:
+                plt.savefig(save)
 
         return book
 
@@ -1327,7 +1357,6 @@ if __name__ == '__main__':
         cat.collect_valid_sources()
 
         test_bin = cat.dump_binary('TEST.binary', norm=True, sigma=3.)
-        # test_bin = cat.dump_binary('TEST.binary', channels=['FIRST','WISE_W1'])
 
         print(test_bin)
 
@@ -1336,11 +1365,23 @@ if __name__ == '__main__':
 
         pink.train()
         pink.save('TEST.pink')
+
+        # ------------------
+
+        test_bin = cat.dump_binary('TEST_chan.binary', norm=True, channels=['FIRST','WISE_W1'])
+
+        print(test_bin)
+
+        pink = Pink(test_bin, pink_args={'som-width':8,
+                                         'som-height':8}) 
+
+        pink.train()        
+        pink.save('TEST2.pink')
         # pink.heatmap(plot=True, image_number=0, apply=False)
         # pink.heatmap(plot=True, image_number=500, apply=False)
         
     elif '-t' in sys.argv:
-        pink = Pink.loader('TEST.pink')
+        pink = Pink.loader('TEST2.pink')
         src = len(pink.binary.sources)
 
         # pink.show_som()
@@ -1356,7 +1397,7 @@ if __name__ == '__main__':
                 return ''
             else:
                 return l
-        pink.attribute_heatmap(func=source_rgz)
+        pink.attribute_heatmap(func=source_rgz, save='example_chan_number_counts.pdf')
 
         def source_rgz(s):
             l = s.rgz_annotations()['names']
@@ -1364,9 +1405,9 @@ if __name__ == '__main__':
                 return ''
             else:
                 return l
-        pink.attribute_heatmap(func=source_rgz)
+        pink.attribute_heatmap(func=source_rgz, xtick_rotation=45, save='example_chan_component_counts.pdf')
 
-        # pink.count_map(plot=True)
+        pink.count_map(plot=True, save='example_chan_count_map.pdf')
 
         # for i in tqdm(range(10, 100)):
         #     pink.heatmap(plot=True, image_number=i, apply=False)#, save=f'{plot_dir}/{i}_heatmap.pdf')
