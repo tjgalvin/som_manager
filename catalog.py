@@ -956,7 +956,7 @@ class Pink(Base):
             for y in range(SOM_height):
                 d = data[x*neuron_width:(x+1)*neuron_width, 
                          y*neuron_width:(y+1)*neuron_width]
-                ax[x,y].imshow(d, cmap=plt.get_cmap('coolwarm'))
+                ax[x,y].imshow(d)
                 ax[x,y].get_xaxis().set_ticks([])
                 ax[x,y].get_yaxis().set_ticks([])
 
@@ -1384,7 +1384,8 @@ if __name__ == '__main__':
         pink = Pink.loader('TEST2.pink')
         src = len(pink.binary.sources)
 
-        # pink.show_som()
+        pink.show_som(channel=0)
+        pink.show_som(channel=1)
 
         plot_dir = 'Source_Heatmaps'
         make_dir(plot_dir)
