@@ -936,32 +936,45 @@ class Pink(Base):
 
             return (data, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height)
 
-    def show_som(self, channel=0):
+    def show_som(self, channel=0, split=False):
         '''Method to plot the trained SOM, and associated plotting options
 
         channel - int
              The channel from the SOM to plot. Defaults to the first (zero-index) channel
+        split - Bool
+             Slice the neurons into their own subplot axes objects from the returned data
+             matrix from self.retrieve_som_data(). Otherwise just plot it on screen. 
         '''
         params = self.retrieve_som_data(channel=channel)
         if params is None:
             return
         (data, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height) = params
 
-        fig, ax = plt.subplots(SOM_width, SOM_height, figsize=(16,16), 
-                            gridspec_kw={'hspace':0.001,'wspace':0.001,
-                                        'left':0.001, 'right':0.999,
-                                        'bottom':0.001, 'top':0.9})
+        if split:
+            fig, ax = plt.subplots(SOM_width, SOM_height, figsize=(16,16), 
+                                gridspec_kw={'hspace':0.001,'wspace':0.001,
+                                            'left':0.001, 'right':0.999,
+                                            'bottom':0.001, 'top':0.9})
 
-        for x in range(SOM_width):
-            for y in range(SOM_height):
-                d = data[x*neuron_width:(x+1)*neuron_width, 
-                         y*neuron_width:(y+1)*neuron_width]
-                ax[x,y].imshow(d)
-                ax[x,y].get_xaxis().set_ticks([])
-                ax[x,y].get_yaxis().set_ticks([])
+            for x in range(SOM_width):
+                for y in range(SOM_height):
+                    d = data[x*neuron_width:(x+1)*neuron_width, 
+                            y*neuron_width:(y+1)*neuron_width]
+                    ax[x,y].imshow(d)
+                    ax[x,y].get_xaxis().set_ticks([])
+                    ax[x,y].get_yaxis().set_ticks([])
 
-        fig.suptitle((f'Images: {len(self.binary.sources)} - Sigma: {self.binary.sigma} - Norm: {self.binary.norm}\n'
-                        f'Channel: {channel}'))
+            fig.suptitle((f'Images: {len(self.binary.sources)} - Sigma: {self.binary.sigma} - Norm: {self.binary.norm}\n'
+                            f'Channel: {channel}'))
+
+        else:
+            fig, ax = plt.subplots(1,1)
+
+            im = ax.imshow(data)
+            ax.get_xaxis().set_ticks([])
+            ax.get_yaxis().set_ticks([])            
+            fig.colorbar(im, label='Intensity')
+
         fig.savefig(f'{self.SOM_path}-ch_{channel}.pdf')
 
     def _process_heatmap(self, image_number=0, plot=False, channel=0, binary=None, save=None):
