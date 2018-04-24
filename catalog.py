@@ -381,7 +381,7 @@ class Source(Base):
         if self.info is None:
             return None
 
-        return doc['annotation']
+        return self.info['annotation']
     # ----------------------------------------------------------------    
 
     def _valid(self, nan_fail=True, shape_fail=True, zero_fail=True):
@@ -1383,19 +1383,27 @@ if __name__ == '__main__':
         pink.heatmap(plot=False, apply=True)
 
         def source_rgz(s):
-            l = str(s.rgz_annotations()['number'])
-            if l is None:
+            a = s.rgz_annotations()['object']
+
+            if a is None:
                 return ''
             else:
-                return l
+                if not isinstance(a, list):
+                    a = [a]
+                return len(a)
         pink.attribute_heatmap(func=source_rgz, save='example_chan_number_counts.pdf')
 
         def source_rgz(s):
-            l = s.rgz_annotations()['names']
-            if l is None:
+            a = s.rgz_annotations()['object']
+            # print([i for i in a['object']])
+            # print(len(a), type(a['object']))
+            if a is None:
                 return ''
             else:
-                return l
+                if not isinstance(a, list):
+                    a = [a]
+                return [ i['name'] for i in a ]
+                
         pink.attribute_heatmap(func=source_rgz, xtick_rotation=45, save='example_chan_component_counts.pdf')
 
         pink.count_map(plot=True, save='example_chan_count_map.pdf')
