@@ -7,6 +7,7 @@ import glob
 import shutil
 import pickle
 import struct
+import xmltodict as xd
 import hashlib
 import requests
 import subprocess
@@ -14,8 +15,6 @@ import numpy as np
 import reproject as rp
 import astropy.units as u
 import matplotlib.pyplot as plt
-
-from bs4 import BeautifulSoup
 
 from PIL import Image
 from tqdm import tqdm
@@ -327,7 +326,7 @@ class Source(Base):
         xml = first_path.replace('PNGImages', 'Annotations').replace('.png', '.xml')
         if os.path.exists(xml):
             with open(xml, 'r') as xml_in:
-                self.info = BeautifulSoup(xml_in.read(), 'lxml')
+                self.info = xd.parse(xml_in.read())
 
         out_dir = f"{self.out}/FIRST_Common"
         path = f"{out_dir}/{self.filename}".replace('.png','.npy')
@@ -382,17 +381,7 @@ class Source(Base):
         if self.info is None:
             return None
 
-        components = {}
-        names = []
-        for obj in self.info.find_all('object'):
-            for n in obj.find('name'):
-                names.append(n)
-
-        # Place holder for future expansion
-        components['names'] = names
-        components['number'] = len(names)
-
-        return components
+        return doc['annotation']
     # ----------------------------------------------------------------    
 
     def _valid(self, nan_fail=True, shape_fail=True, zero_fail=True):
@@ -526,11 +515,6 @@ class Binary(Base):
 
         return out
 
-    def __repr__(self):
-        '''Print a neat represenation of the object. Return __str__
-        '''
-        return self.__str__()
-
     def __init__(self, binary_path, sources, sigma, norm, channels=''):
         '''Create and track the meta-information of the binary
 
@@ -603,11 +587,6 @@ class Catalog(Base):
         out += f'\tNumber of Sources {len(self.sources)}'
 
         return out
-
-    def __repr__(self):
-        '''Return neat representation of the object. Defaults to __str__
-        '''
-        return self.__str__()
 
     def __init__(self, rgz_dir=None, catalog=None, out_dir='Images', 
                        sources_dir='Sources', scan_sources=True, step=1000):
@@ -826,10 +805,6 @@ class Pink(Base):
 
         return out
 
-    def __repr__(self):
-        '''Print a neat representation of the object. Defaults to __str__
-        '''
-        return self.__str__()
 
     def __init__(self, binary, pink_args = {}):
         '''Create the instance of the Pink object and set appropriate parameters
@@ -1230,7 +1205,9 @@ class Pink(Base):
             max_val = mv if mv > max_val else max_val
 
         # Work out the unique labels and sort them so that each 
-        # sub pplot may be consistent
+        # sub pplot may be consistent. Calling Counter object 
+        # with a key that doesnt exits returns 0. Exploit this 
+        # when plotting the bars
         unique_labels = list(set([u for labels in unique_labels for u in labels]))
         unique_labels.sort()
 
