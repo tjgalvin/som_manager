@@ -7,13 +7,10 @@ import glob
 import shutil
 import pickle
 import struct
+import subprocess
 import xmltodict as xd
 import hashlib
-import requests
-import subprocess
 import numpy as np
-import reproject as rp
-import astropy.units as u
 import matplotlib.pyplot as plt
 
 from PIL import Image
@@ -21,7 +18,6 @@ from tqdm import tqdm
 from collections import defaultdict
 from astropy.table import Table
 from astropy.io import fits as pyfits
-from astropy.coordinates import SkyCoord
 
 from dask import delayed
 from dask.diagnostics import ProgressBar
@@ -1349,12 +1345,27 @@ if __name__ == '__main__':
 
         pink.train()        
         pink.save('TEST2.pink')
+
+        # ------------------
+
+        test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=3,
+                                    channels=['FIRST','WISE_W1'],
+                                    project_dir='Experiments/FIRST_WISE_Norm_3')
+
+        print(test_bin)
+
+        pink = Pink(test_bin, pink_args={'som-width':8,
+                                         'som-height':8}) 
+
+        pink.train()        
+        pink.save('TEST3.pink')
         # pink.heatmap(plot=True, image_number=0, apply=False)
         # pink.heatmap(plot=True, image_number=500, apply=False)
         
     elif '-t' in sys.argv:
         for pink_file, out_name in [('Experiments/FIRST_Norm_3/TEST.pink', 'example'),
-                                    ('Experiments/FIRST_WISE_Norm/TEST2.pink', 'example_chan')]:
+                                    ('Experiments/FIRST_WISE_Norm/TEST2.pink', 'example_chan'),
+                                    ('Experiments/FIRST_WISE_Norm_3/TEST3.pink', 'example_chan_3')]:
 
                 pink = Pink.loader(pink_file)
 
