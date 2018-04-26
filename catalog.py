@@ -1314,21 +1314,23 @@ if __name__ == '__main__':
 
         def source_rgz(s):
             # If there is only one object, its returned as dict. Test and list it if needed            
-            a = s.rgz_annotations()['object']
+            a = s.rgz_annotations()
             if a is None:
                 return ''
             else:
+                a = a['object']
                 if not isinstance(a, list):
                     a = [a]
-                return len(a)
+                return str(len(a))  
         pink.attribute_heatmap(func=source_rgz, save='example_chan_number_counts.pdf')
 
         def source_rgz(s):
             # If there is only one object, its returned as dict. Test and list it if needed
-            a = s.rgz_annotations()['object']
+            a = s.rgz_annotations()
             if a is None:
                 return ''
             else:
+                a = a['object']
                 if not isinstance(a, list):
                     a = [a]
                 return [ i['name'] for i in a ]
