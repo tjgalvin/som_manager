@@ -1,3 +1,6 @@
+'''A simple script to test to see if the RGZ_RCNN matches one to one with the images downloaded from the down_images script
+'''
+
 import glob
 import os
 
@@ -12,7 +15,7 @@ print(f'Located {len(files)} files...')
 
 first_names = [ i.split('/')[-1].split('_')[0].replace('FIRST','') for i in files]
 
-stamps_dir = '/kusers/postgrad/tgalvin/Postdoc_Work/wise_images/Images/wise_reprojected'
+stamps_dir = 'image_data/Images/wise_reprojected'
 found = []
 not_found = []
 for i in first_names:
