@@ -805,7 +805,6 @@ class Pink(Base):
 
         return out
 
-
     def __init__(self, binary, pink_args = {}):
         '''Create the instance of the Pink object and set appropriate parameters
         
