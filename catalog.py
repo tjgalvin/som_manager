@@ -306,7 +306,7 @@ class Source(Base):
     # ----------------------------------------------------------------    
     # Function to load in data from RGZ
     # ----------------------------------------------------------------    
-    def load_rgz_images(self):
+    def load_rgz_images_pngs(self):
         '''Given the image path from the intialisation of this Source instance
         attempt to load in the saved RGZ images using the data directory structure
         from the download_data.py script. 
@@ -372,6 +372,84 @@ class Source(Base):
         self.common_shape = s1
         self.valid = True
     
+    def load_rgz_images(self, down_dir='image_data'):
+        '''Given the image path from the intialisation of this Source instance
+        attempt to load in the saved RGZ images using the data directory structure
+        from the download_data.py script. Use the filenames from that directory to 
+        open the FITS images downloaded from the download_images.py scrip from this repo.
+
+        Since these images are (1) already reprojected, we will load them in and place them into 
+        the COMMON images folder. Since we are following a `hardcoded` directory structure, the keys to the self.common_images
+        dict will be `FIRST` and `WISE_W1`.
+
+        Attach the annotation file to the self.info structure for the moment.
+
+        down_dir - str
+              The directory of the FITS data that has been downloaded from download_images.py
+        '''
+        self.valid = False
+        # Load in the FIRST Dataset
+        first_path = self.rgz_path
+        self.filename = first_path.split('/')[-1]
+                
+        # The filename from FIRST server is slightly different to the name used by rgz_rcnn
+        down_name = self.filename.replace('_logminmax.png','').replace('FIRST','')        
+        down_name = down_name[:7]+down_name[9:]
+        # print(self.filename, down_name)
+
+        xml = first_path.replace('PNGImages', 'Annotations').replace('.png', '.xml')
+        if os.path.exists(xml):
+            with open(xml, 'r') as xml_in:
+                self.info = xd.parse(xml_in.read())
+
+        out_dir = f"{self.out}/FIRST_Common"
+        make_dir(out_dir)
+
+        first_file = f'{down_dir}/first/{down_name}.fits'
+        if os.path.exists(first_file):
+            with pyfits.open(first_file, memmap=True) as in_file:
+                data = in_file[0].data
+                # if np.any(~np.isfinite(data)):
+                #     print(f'Dropping RGZ FIRST image {self.filename}')
+                #     return
+
+                first_path = f'{out_dir}/{down_name}.npy'
+                np.save(first_path, data.astype('f'))
+
+                s1 = data.shape
+                self.common_images['FIRST'] = first_path
+        # else:
+        #     print('FIRST FILE', down_name, first_file)
+
+        wise_file = first_file.replace('first','wise_reprojected')
+        if not os.path.exists(wise_file):
+            # print('WISE FILE', wise_file)
+            self.common_images['WISE_W1'] = 'ERROR'
+            return
+
+        out_dir = f"{self.out}/WISE_W1_Common"
+        path = f"{out_dir}/{down_name}".replace('.fits','.npy')
+        make_dir(out_dir)
+
+        with pyfits.open(wise_file, memmap=True) as in_file:
+            data = in_file[0].data
+            # if np.any(~np.isfinite(data)):
+            #     print(f'Dropping RGZ FIRST image {self.filename}')
+            #     return
+
+            wise_path = f'{out_dir}/{down_name}.npy'
+            np.save(wise_path, data.astype('f'))
+
+            s2 = data.shape
+            self.common_images['WISE_W1'] = wise_path
+        
+        # The images do not have the same sizes...
+        if s1 != s2:
+            return
+        
+        self.common_shape = s1
+        self.valid = True
+    
     def rgz_annotations(self):
         '''Return the object annotation information from the self.info
         structure. if this is None, than the corresponding XML file was
@@ -398,14 +476,14 @@ class Source(Base):
               assume that there was clipping of the field
         '''
         self.valid = False
-        for img in self.images.values():
+        for img in self.common_images.values():
             if img == 'ERROR':
                 return
             if self.filename is None:
                 return
 
-            with pyfits.open(img) as fits:
-                data = fits[0].data.squeeze()
+            with open(img, 'rb') as fits:
+                data = np.load(fits)
 
                 if nan_fail and np.isnan(data).any():
                     return
@@ -699,6 +777,9 @@ class Catalog(Base):
     def collect_valid_sources(self):
         '''Make a new list of just the valid sources
         '''
+        for s in tqdm(self.sources):
+            s.is_valid()
+
         self.valid_sources = [s for s in self.sources if s.valid == True]
         print(f'\nThe number of valid sources is: {len(self.valid_sources)}')
 
@@ -1343,6 +1424,8 @@ if __name__ == '__main__':
         cat = Catalog(rgz_dir=rgz_dir)
 
         cat.save_sources()
+
+        print('\nValidating sources...')
         cat.collect_valid_sources()
 
         test_bin = cat.dump_binary('TEST.binary', norm=True, sigma=3.)
