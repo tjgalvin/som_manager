@@ -399,9 +399,13 @@ class Source(Base):
               The image that will be transformed onto a log scale
         '''
 
-        return numpy.log10(data)
+        data = np.log10(data)
+        mask = np.isfinite(data)
+        data[mask] = np.nanmin(data.flatten())
 
-    def dump(self, of, order=None, sigma=False, norm=False):
+        return data
+
+    def dump(self, of, order=None, sigma=False, norm=False, log10=False):
         '''Dump the contents of the common_images to a binary file 
         provided by the of file handler
 
@@ -412,7 +416,12 @@ class Source(Base):
              Order of the keys to write out to
         sigma - False or float
              If False, there will be no sigma clipping performed on the 
-             data. If float, then 
+             data. If float, then
+        norm - bool
+             Normalise the data so the min/max is 0 and 1
+        log10 - bool
+             Log the data. For values which are negative, so come out as NaN, replace
+             with the smallest non-Nan value
         '''
         if order is None:
             order = self.common_images.keys()
@@ -423,10 +432,13 @@ class Source(Base):
             img = self.common_images[item]
             with open(img, 'rb') as in_file:
                 data = np.load(in_file)
-                if norm:
-                    data = self.normalise(data)
+                
                 if isinstance(sigma, float):
                     data = self.sigma_clip(data, std=sigma)
+                if log10:
+                    data = self.log10(data)
+                if norm:
+                    data = self.normalise(data)
                 
                 if of is None:
                     return data.astype('float')
@@ -702,7 +714,7 @@ class Catalog(Base):
 
         self.valid_sources = results
 
-    def dump_binary(self, binary_out, channels=['FIRST'], sigma=False, norm=False, project_dir='.'):
+    def dump_binary(self, binary_out, channels=['FIRST'], sigma=False, norm=False, log10=False, project_dir='.'):
         '''This function produces the binary file that is expected by PINK. It contains
         the total number of images to use, the number of chanels and the dimension in and y 
         axis
@@ -719,6 +731,8 @@ class Catalog(Base):
              Sets whether normalisation on each plane will be performed. At the moment this
              is an independent, meaning each plane is normalised independently from one
              another
+        log10 - bool
+             Log the data. For invalid values, insert the smallest non-NaN value in the data
         project_dir - str
             The directory to consider as the dumping ground for this 
             binary and associated high level data products
@@ -1322,6 +1336,20 @@ if __name__ == '__main__':
 
         print('\nValidating sources...')
         cat.collect_valid_sources()
+
+        test_bin = cat.dump_binary('TEST_chan.binary', norm=True, sigma=3, log10=True, 
+                                    channels=['FIRST','WISE_W1'],
+                                    project_dir='Experiments/FIRST_WISE_Norm_Log_3')
+
+        print(test_bin)
+
+        pink = Pink(test_bin, pink_args={'som-width':8,
+                                         'som-height':8}) 
+
+        pink.train()        
+        pink.save('TEST2.pink')
+
+        # ------------------
 
         test_bin = cat.dump_binary('TEST.binary', norm=True, sigma=3., project_dir='Experiments/FIRST_Norm_3')
 
