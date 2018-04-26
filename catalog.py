@@ -379,6 +379,15 @@ class Source(Base):
         '''
         return 1. * data / data.max()
 
+    def log10(self, data):
+        '''Apply a log transform onto the data array
+
+        data - numpy.ndarray
+              The image that will be transformed onto a log scale
+        '''
+
+        return numpy.log10(data)
+
     def dump(self, of, order=None, sigma=False, norm=False):
         '''Dump the contents of the common_images to a binary file 
         provided by the of file handler
@@ -1059,7 +1068,8 @@ class Pink(Base):
             raise ValueError(f'The hash checked failed for {self.binary.binary_path}')
 
         pink_avail = True if shutil.which('Pink') is not None else False        
-        exec_str = f'Pink --cuda-off --map {self.binary.binary_path} {self.heat_path} {self.SOM_path} '
+        # exec_str = f'Pink --cuda-off --map {self.binary.binary_path} {self.heat_path} {self.SOM_path} '
+        exec_str = f'Pink --map {self.binary.binary_path} {self.heat_path} {self.SOM_path} '
         exec_str += ' '.join(f'--{k}={v}' for k,v in self.pink_args.items())
         
         if pink_avail:
@@ -1334,7 +1344,6 @@ if __name__ == '__main__':
                 if not isinstance(a, list):
                     a = [a]
                 return [ i['name'] for i in a ]
-                
         pink.attribute_heatmap(func=source_rgz, xtick_rotation=45, save='example_chan_component_counts.pdf')
 
         pink.count_map(plot=True, save='example_chan_count_map.pdf')
@@ -1357,7 +1366,6 @@ if __name__ == '__main__':
         # pink.heatmap(plot=True, image_number=400, apply=False)
         # pink.heatmap(plot=True, image_number=450, apply=False)
         
-  
     else:
         print('Options:')
         print(' -r : Run test code to scan in RGZ image data')
