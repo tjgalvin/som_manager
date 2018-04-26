@@ -76,12 +76,29 @@ def make_dir(d):
 class Base(object):
     '''Base class to inherit from. 
     '''
-    def save(self, out_path):
+    def _path_build(self, out_file):
+        '''Helper function to make a output file path if the self.project_dir
+        attribute exists
+        '''
+        if 'project_dir' in dir(self):
+            out_file = f'{self.project_dir}/{out_file}'
+
+        return out_file
+
+    def save(self, out_path, disable_project_dir=False):
         '''A function to save this class instance to disk.
 
         out_path - str
               The path to write the pickled output to
+        disable_projet_dir - False
+              By default this function will look for a project_dir attribute
+              to save to. This will disable that behaviour
         '''
+        if not disable_project_dir:
+            if 'project_dir' in dir(self):
+                make_dir(self.project_dir)
+                out_path = f'{self.project_dir}/{out_path}'
+
         with open(out_path, 'wb') as out_file:
             pickle.dump(self.__dict__, out_file)
 
@@ -450,7 +467,7 @@ class Binary(Base):
 
         return out
 
-    def __init__(self, binary_path, sources, sigma, norm, channels=''):
+    def __init__(self, binary_path, sources, sigma, norm, channels='', project_dir='.'):
         '''Create and track the meta-information of the binary
 
         binary_path - str
@@ -463,6 +480,9 @@ class Binary(Base):
             The option passed to each of the Source.dump() methods
         channels - list
             A list of the channels/surveys packed into the binary_path file
+        project_dir - str
+            The directory to consider as the dumping ground for this 
+            binary and associated high level data products
         '''
         self.sources = sources
         self.binary_path = binary_path
@@ -470,6 +490,10 @@ class Binary(Base):
         self.channels = channels
         self.sigma = sigma
         self.norm = norm
+        self.project_dir = project_dir
+
+        if project_dir != '.':
+            make_dir(project_dir)
 
     def get_image(self, index, channel=0):
         '''Return the index-th image that was dumped to the binary image file that
@@ -682,7 +706,7 @@ class Catalog(Base):
 
         self.valid_sources = results
 
-    def dump_binary(self, binary_out, channels=['FIRST'], sigma=False, norm=False):
+    def dump_binary(self, binary_out, channels=['FIRST'], sigma=False, norm=False, project_dir='.'):
         '''This function produces the binary file that is expected by PINK. It contains
         the total number of images to use, the number of chanels and the dimension in and y 
         axis
@@ -699,6 +723,9 @@ class Catalog(Base):
              Sets whether normalisation on each plane will be performed. At the moment this
              is an independent, meaning each plane is normalised independently from one
              another
+        project_dir - str
+            The directory to consider as the dumping ground for this 
+            binary and associated high level data products
         '''
         if isinstance(channels, str):
             channels = [channels]
@@ -710,6 +737,10 @@ class Catalog(Base):
         # to use as the image dimensions. For the moment ignore the problem
         assert len(img_sizes) == 1, 'Different image sizes, not sure what to do yet'
         x_dim, y_dim = img_sizes[0][0], img_sizes[0][1]
+
+        if project_dir != '.':
+            make_dir(project_dir)
+            binary_out = f'{project_dir}/{binary_out}'
 
         print(f'The number of images to dump: {len(self.valid_sources)}')
         print(f'The number of channels to dump: {len(channels)}')
@@ -723,7 +754,7 @@ class Catalog(Base):
             for s in self.valid_sources:
                 s.dump(out_file, order=channels, sigma=sigma, norm=norm)
 
-        return Binary(binary_out, self.valid_sources, sigma, norm, channels=channels)
+        return Binary(binary_out, self.valid_sources, sigma, norm, channels=channels, project_dir=project_dir)
 
 class Pink(Base):
     '''Manage a single Pink training session, including the arguments used to run
@@ -756,6 +787,7 @@ class Pink(Base):
 
         self.trained = False
         self.binary = binary
+        self.project_dir = self.binary.project_dir
         # Items to generate the SOM
         self.SOM_path = f'{self.binary.binary_path}.Trained_SOM'
         self.SOM_hash = ''
@@ -1049,7 +1081,8 @@ class Pink(Base):
 
         TODO: Make this a `map` function. Ideally should just be a name change. 
         TODO: Consider making a `map` class? So a separate binary can be easily
-              processed by a trained PINK instance?
+              processed by a trained PINK instance? Or create a new PINK instance
+              for that `map` file?
 
         binary - Binary or None
              An instance of the Binary class with sources to match to the SOM. If None, 
@@ -1099,6 +1132,8 @@ class Pink(Base):
         save - None or Str
             If None, show the figure on screen. Otherwise save to the path in save       
         '''
+        save = self._path_build(save)
+                
         # Step one, get range
         vmin, vmax = np.inf, 0
         for k, v in book.items():
@@ -1135,6 +1170,8 @@ class Pink(Base):
         xtick_rotation - None or float
             Will rotate the xlabel by rotation
         '''
+        save = self._path_build(save)
+
         # Step one, get unique items and their counts
         from collections import Counter
         unique_labels = []
@@ -1290,7 +1327,7 @@ if __name__ == '__main__':
         print('\nValidating sources...')
         cat.collect_valid_sources()
 
-        test_bin = cat.dump_binary('TEST.binary', norm=True, sigma=3.)
+        test_bin = cat.dump_binary('TEST.binary', norm=True, sigma=3., project_dir='Experiments/FIRST_Norm_3')
 
         print(test_bin)
 
@@ -1302,7 +1339,8 @@ if __name__ == '__main__':
 
         # ------------------
 
-        test_bin = cat.dump_binary('TEST_chan.binary', norm=True, channels=['FIRST','WISE_W1'])
+        test_bin = cat.dump_binary('TEST_chan.binary', norm=True, channels=['FIRST','WISE_W1'],
+                                    project_dir='Experiments/FIRST_WISE_Norm')
 
         print(test_bin)
 
@@ -1315,42 +1353,44 @@ if __name__ == '__main__':
         # pink.heatmap(plot=True, image_number=500, apply=False)
         
     elif '-t' in sys.argv:
-        pink = Pink.loader('TEST2.pink')
-        src = len(pink.binary.sources)
+        for pink_file, out_name in [('Experiments/FIRST_Norm_3/TEST.pink', 'example'),
+                                    ('Experiments/FIRST_WISE_Norm/TEST2.pink', 'example_chan')]:
 
-        pink.show_som(channel=0)
-        pink.show_som(channel=1)
+                pink = Pink.loader(pink_file)
 
-        plot_dir = 'Source_Heatmaps'
-        make_dir(plot_dir)
+                pink.show_som(channel=0)
+                pink.show_som(channel=1)
 
-        pink.heatmap(plot=False, apply=True)
+                plot_dir = 'Source_Heatmaps'
+                make_dir(plot_dir)
 
-        def source_rgz(s):
-            # If there is only one object, its returned as dict. Test and list it if needed            
-            a = s.rgz_annotations()
-            if a is None:
-                return ''
-            else:
-                a = a['object']
-                if not isinstance(a, list):
-                    a = [a]
-                return str(len(a))  
-        pink.attribute_heatmap(func=source_rgz, save='example_chan_number_counts.pdf')
+                pink.heatmap(plot=False, apply=True)
 
-        def source_rgz(s):
-            # If there is only one object, its returned as dict. Test and list it if needed
-            a = s.rgz_annotations()
-            if a is None:
-                return ''
-            else:
-                a = a['object']
-                if not isinstance(a, list):
-                    a = [a]
-                return [ i['name'] for i in a ]
-        pink.attribute_heatmap(func=source_rgz, xtick_rotation=45, save='example_chan_component_counts.pdf')
+                def source_rgz(s):
+                    # If there is only one object, its returned as dict. Test and list it if needed            
+                    a = s.rgz_annotations()
+                    if a is None:
+                        return ''
+                    else:
+                        a = a['object']
+                        if not isinstance(a, list):
+                            a = [a]
+                        return str(len(a))  
+                pink.attribute_heatmap(func=source_rgz, save=f'{out_name}_chan_number_counts.pdf')
 
-        pink.count_map(plot=True, save='example_chan_count_map.pdf')
+                def source_rgz(s):
+                    # If there is only one object, its returned as dict. Test and list it if needed
+                    a = s.rgz_annotations()
+                    if a is None:
+                        return ''
+                    else:
+                        a = a['object']
+                        if not isinstance(a, list):
+                            a = [a]
+                        return [ i['name'] for i in a ]
+                pink.attribute_heatmap(func=source_rgz, xtick_rotation=45, save='example_chan_component_counts.pdf')
+
+                pink.count_map(plot=True, save=f'{out_name}_count_map.pdf')
 
         # for i in tqdm(range(10, 100)):
         #     pink.heatmap(plot=True, image_number=i, apply=False)#, save=f'{plot_dir}/{i}_heatmap.pdf')
