@@ -1047,6 +1047,10 @@ class Pink(Base):
         '''Using Pink, produce a heatmap of the input Binary instance. 
         Note that by default the Binary instance attached to self.binary will be used. 
 
+        TODO: Make this a `map` function. Ideally should just be a name change. 
+        TODO: Consider making a `map` class? So a separate binary can be easily
+              processed by a trained PINK instance?
+
         binary - Binary or None
              An instance of the Binary class with sources to match to the SOM. If None, 
              than use the Binary instance attached to this Pink class instance
