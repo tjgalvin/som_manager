@@ -401,7 +401,7 @@ class Source(Base):
 
         data = np.log10(data)
         mask = np.isfinite(data)
-        data[mask] = np.nanmin(data.flatten())
+        data[~mask] = np.nanmin(data.flatten())
 
         return data
 
@@ -414,30 +414,38 @@ class Source(Base):
            write it to the file
         order - list
              Order of the keys to write out to
-        sigma - False or float
+        sigma - False or float or list
              If False, there will be no sigma clipping performed on the 
-             data. If float, then
-        norm - bool
-             Normalise the data so the min/max is 0 and 1
-        log10 - bool
+             data. If float, then it will be sigma clipped to that level. If list, then 
+             each index in the list is used to evaluate the condition for the corresponding
+             channel being dumped.
+        norm - bool or list
+             Normalise the data so the min/max is 0 and 1. If listm then each index
+             in the list is used to evaluate the condition for the corresponding 
+             channel being dumped
+        log10 - bool or list
              Log the data. For values which are negative, so come out as NaN, replace
-             with the smallest non-Nan value
+             with the smallest non-Nan value. If list, then then each index in the list
+            is used to evaluate the confition for the corresponding channel being dumped
         '''
         if order is None:
             order = self.common_images.keys()
 
-        for item in order:
+        for count, item in enumerate(order):
             if item not in self.common_images.keys():
                 raise ValueError
             img = self.common_images[item]
             with open(img, 'rb') as in_file:
                 data = np.load(in_file)
                 
-                if isinstance(sigma, float):
+                if isinstance(sigma, (float, int)):
                     data = self.sigma_clip(data, std=sigma)
-                if log10:
+                elif isinstance(sigma, list) and isinstance(sigma[count], (float, int)) :
+                    data = self.sigma_clip(data, std=sigma[count])
+
+                if (isinstance(log10, bool) and log10) or (isinstance(log10, list) and log10[count]):
                     data = self.log10(data)
-                if norm:
+                if (isinstance(norm, bool) and norm) or (isinstance(norm, list) and norm[count]):
                     data = self.normalise(data)
                 
                 if of is None:
@@ -1327,129 +1335,134 @@ class Pink(Base):
 
 if __name__ == '__main__':
 
-    if '-r' in sys.argv:
-        rgz_dir = 'rgz_rcnn_data'
+    for i in sys.argv[1:]:
+   
+        if '-r' == i:
+            rgz_dir = 'rgz_rcnn_data'
 
-        cat = Catalog(rgz_dir=rgz_dir)
+            cat = Catalog(rgz_dir=rgz_dir)
 
-        cat.save_sources()
+            cat.save_sources()
 
-        print('\nValidating sources...')
-        cat.collect_valid_sources()
+            print('\nValidating sources...')
+            cat.collect_valid_sources()
 
-        test_bin = cat.dump_binary('TEST_chan.binary', norm=True, sigma=3, log10=True, 
-                                    channels=['FIRST','WISE_W1'],
-                                    project_dir='Experiments/FIRST_WISE_Norm_Log_3')
+            test_bin = cat.dump_binary('TEST_chan.binary', norm=True, sigma=[3., False], log10=[True,False], 
+                                        channels=['FIRST','WISE_W1'],
+                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3')
 
-        print(test_bin)
+            print(test_bin)
 
-        pink = Pink(test_bin, pink_args={'som-width':8,
-                                         'som-height':8}) 
+            pink = Pink(test_bin, pink_args={'som-width':8,
+                                            'som-height':8}) 
 
-        pink.train()        
-        pink.save('TEST2.pink')
+            pink.train()        
+            pink.save('TEST2.pink')
 
-        # ------------------
+            # ------------------
 
-        test_bin = cat.dump_binary('TEST.binary', norm=True, sigma=3., project_dir='Experiments/FIRST_Norm_3')
+            test_bin = cat.dump_binary('TEST.binary', norm=True, sigma=[3., False], 
+                                    project_dir='Experiments/FIRST_Norm_3')
 
-        print(test_bin)
+            print(test_bin)
 
-        pink = Pink(test_bin, pink_args={'som-width':8,
-                                         'som-height':8}) 
+            pink = Pink(test_bin, pink_args={'som-width':8,
+                                            'som-height':8}) 
 
-        pink.train()
-        pink.save('TEST.pink')
+            pink.train()
+            pink.save('TEST.pink')
 
-        # ------------------
+            # ------------------
 
-        test_bin = cat.dump_binary('TEST_chan.binary', norm=True, channels=['FIRST','WISE_W1'],
-                                    project_dir='Experiments/FIRST_WISE_Norm')
+            test_bin = cat.dump_binary('TEST_chan.binary', norm=True, log10=[True, False], channels=['FIRST','WISE_W1'],
+                                        project_dir='Experiments/FIRST_WISE_Norm')
 
-        print(test_bin)
+            print(test_bin)
 
-        pink = Pink(test_bin, pink_args={'som-width':8,
-                                         'som-height':8}) 
+            pink = Pink(test_bin, pink_args={'som-width':8,
+                                            'som-height':8}) 
 
-        pink.train()        
-        pink.save('TEST2.pink')
+            pink.train()        
+            pink.save('TEST2.pink')
 
-        # ------------------
+            # ------------------
 
-        test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=3,
-                                    channels=['FIRST','WISE_W1'],
-                                    project_dir='Experiments/FIRST_WISE_Norm_3')
+            test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=3.,
+                                        channels=['FIRST','WISE_W1'],
+                                        project_dir='Experiments/FIRST_WISE_Norm_3')
 
-        print(test_bin)
+            print(test_bin)
 
-        pink = Pink(test_bin, pink_args={'som-width':8,
-                                         'som-height':8}) 
+            pink = Pink(test_bin, pink_args={'som-width':8,
+                                            'som-height':8}) 
 
-        pink.train()        
-        pink.save('TEST3.pink')
-        # pink.heatmap(plot=True, image_number=0, apply=False)
-        # pink.heatmap(plot=True, image_number=500, apply=False)
-        
-    elif '-t' in sys.argv:
-        for pink_file, out_name in [('Experiments/FIRST_Norm_3/TEST.pink', 'example'),
-                                    ('Experiments/FIRST_WISE_Norm/TEST2.pink', 'example_chan'),
-                                    ('Experiments/FIRST_WISE_Norm_3/TEST3.pink', 'example_chan_3')]:
-
-                pink = Pink.loader(pink_file)
-
-                pink.show_som(channel=0)
-                pink.show_som(channel=1)
-
-                plot_dir = 'Source_Heatmaps'
-                make_dir(plot_dir)
-
-                pink.heatmap(plot=False, apply=True)
-
-                def source_rgz(s):
-                    # If there is only one object, its returned as dict. Test and list it if needed            
-                    a = s.rgz_annotations()
-                    if a is None:
-                        return ''
-                    else:
-                        a = a['object']
-                        if not isinstance(a, list):
-                            a = [a]
-                        return str(len(a))  
-                pink.attribute_heatmap(func=source_rgz, save=f'{out_name}_chan_number_counts.pdf')
-
-                def source_rgz(s):
-                    # If there is only one object, its returned as dict. Test and list it if needed
-                    a = s.rgz_annotations()
-                    if a is None:
-                        return ''
-                    else:
-                        a = a['object']
-                        if not isinstance(a, list):
-                            a = [a]
-                        return [ i['name'] for i in a ]
-                pink.attribute_heatmap(func=source_rgz, xtick_rotation=45, save='example_chan_component_counts.pdf')
-
-                pink.count_map(plot=True, save=f'{out_name}_count_map.pdf')
-
-        # for i in tqdm(range(10, 100)):
-        #     pink.heatmap(plot=True, image_number=i, apply=False)#, save=f'{plot_dir}/{i}_heatmap.pdf')
+            pink.train()        
+            pink.save('TEST3.pink')
+            # pink.heatmap(plot=True, image_number=0, apply=False)
+            # pink.heatmap(plot=True, image_number=500, apply=False)
             
+        elif '-t' == i:
+            for pink_file, out_name in [('Experiments/FIRST_WISE_Norm_Log_3/TEST2.pink', 'example_chan_3_log'),
+                                        ('Experiments/FIRST_Norm_3/TEST.pink', 'example'),
+                                        ('Experiments/FIRST_WISE_Norm/TEST2.pink', 'example_chan'),
+                                        ('Experiments/FIRST_WISE_Norm_3/TEST3.pink', 'example_chan_3')]:
 
-        # pink.heatmap(plot=True, image_number=60, apply=False)
-        # pink.heatmap(plot=True, image_number=61, apply=False)
-        # pink.heatmap(plot=True, image_number=62, apply=False)
-        # pink.heatmap(plot=True, image_number=63, apply=False)
-        # pink.heatmap(plot=True, image_number=64, apply=False)
-        # pink.heatmap(plot=True, image_number=65, apply=False)
+                    pink = Pink.loader(pink_file)
 
-        # pink.heatmap(plot=True, image_number=src-1, apply=False)
-        # pink.heatmap(plot=True, image_number=500, apply=False)
-        # pink.heatmap(plot=True, image_number=100, apply=False)
-        # pink.heatmap(plot=True, image_number=300, apply=False)
-        # pink.heatmap(plot=True, image_number=400, apply=False)
-        # pink.heatmap(plot=True, image_number=450, apply=False)
-        
-    else:
-        print('Options:')
-        print(' -r : Run test code to scan in RGZ image data')
-        print(' -t : Run test code for the Transform outputs and heatmap')
+                    pink.show_som(channel=0)
+                    pink.show_som(channel=1)
+
+                    plot_dir = 'Source_Heatmaps'
+                    make_dir(plot_dir)
+
+                    pink.heatmap(plot=False, apply=True)
+
+                    def source_rgz(s):
+                        # If there is only one object, its returned as dict. Test and list it if needed            
+                        a = s.rgz_annotations()
+                        if a is None:
+                            return ''
+                        else:
+                            a = a['object']
+                            if not isinstance(a, list):
+                                a = [a]
+                            return str(len(a))  
+                    pink.attribute_heatmap(func=source_rgz, save=f'{out_name}_chan_number_counts.pdf')
+
+                    def source_rgz(s):
+                        # If there is only one object, its returned as dict. Test and list it if needed
+                        a = s.rgz_annotations()
+                        if a is None:
+                            return ''
+                        else:
+                            a = a['object']
+                            if not isinstance(a, list):
+                                a = [a]
+                            return [ i['name'] for i in a ]
+                    pink.attribute_heatmap(func=source_rgz, xtick_rotation=45, save='example_chan_component_counts.pdf')
+
+                    pink.count_map(plot=True, save=f'{out_name}_count_map.pdf')
+
+            # for i in tqdm(range(10, 100)):
+            #     pink.heatmap(plot=True, image_number=i, apply=False)#, save=f'{plot_dir}/{i}_heatmap.pdf')
+                
+
+            # pink.heatmap(plot=True, image_number=60, apply=False)
+            # pink.heatmap(plot=True, image_number=61, apply=False)
+            # pink.heatmap(plot=True, image_number=62, apply=False)
+            # pink.heatmap(plot=True, image_number=63, apply=False)
+            # pink.heatmap(plot=True, image_number=64, apply=False)
+            # pink.heatmap(plot=True, image_number=65, apply=False)
+
+            # pink.heatmap(plot=True, image_number=src-1, apply=False)
+            # pink.heatmap(plot=True, image_number=500, apply=False)
+            # pink.heatmap(plot=True, image_number=100, apply=False)
+            # pink.heatmap(plot=True, image_number=300, apply=False)
+            # pink.heatmap(plot=True, image_number=400, apply=False)
+            # pink.heatmap(plot=True, image_number=450, apply=False)
+            
+        else:
+            print('Options:')
+            print(' -r : Run test code to scan in RGZ image data')
+            print(' -t : Run test code for the Transform outputs and heatmap')
+            sys.exit(0)
