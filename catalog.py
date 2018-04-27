@@ -390,7 +390,8 @@ class Source(Base):
         data - numpy.ndarray
              The image that will be normalised to some scale
         '''
-        return 1. * data / data.max()
+        return (data - data.min()) / (data.max() - data.min())
+        # return 1. * data / data.max()
 
     def log10(self, data):
         '''Apply a log transform onto the data array
@@ -1227,6 +1228,9 @@ class Pink(Base):
             If None, show the figure onscreen. Otherwise save it to the filename in 
             save
         '''
+        if save is not None:
+            save = self._path_build(save)
+
         shape = self.src_heatmap[0].shape
         book = np.zeros(shape)
 
@@ -1294,8 +1298,8 @@ if __name__ == '__main__':
 
             print(test_bin)
 
-            pink = Pink(test_bin, pink_args={'som-width':8,
-                                            'som-height':8}) 
+            pink = Pink(test_bin, pink_args={'som-width':2,
+                                            'som-height':2}) 
 
             pink.train()        
             pink.save('TEST2.pink')
@@ -1307,8 +1311,8 @@ if __name__ == '__main__':
 
             print(test_bin)
 
-            pink = Pink(test_bin, pink_args={'som-width':8,
-                                            'som-height':8}) 
+            pink = Pink(test_bin, pink_args={'som-width':2,
+                                            'som-height':2}) 
 
             pink.train()
             pink.save('TEST.pink')
@@ -1320,8 +1324,8 @@ if __name__ == '__main__':
 
             print(test_bin)
 
-            pink = Pink(test_bin, pink_args={'som-width':8,
-                                            'som-height':8}) 
+            pink = Pink(test_bin, pink_args={'som-width':2,
+                                            'som-height':2}) 
 
             pink.train()        
             pink.save('TEST2.pink')
@@ -1334,8 +1338,8 @@ if __name__ == '__main__':
 
             print(test_bin)
 
-            pink = Pink(test_bin, pink_args={'som-width':8,
-                                            'som-height':8}) 
+            pink = Pink(test_bin, pink_args={'som-width':2,
+                                             'som-height':2}) 
 
             pink.train()        
             pink.save('TEST3.pink')
