@@ -399,10 +399,12 @@ class Source(Base):
         data - numpy.ndarray
               The image that will be transformed onto a log scale
         '''
-
+        # This will almost certainly throw a runtime warning on non-normalised
+        # images. You cant log a negative number. It should be safe to ignore. 
         data = np.log10(data)
         mask = np.isfinite(data)
-        data[~mask] = np.nanmin(data.flatten())
+        
+        data[~mask] = np.nanmin(data[mask].flatten())
 
         return data
 
@@ -484,7 +486,7 @@ class Binary(Base):
 
         return out
 
-    def __init__(self, binary_path, sources, sigma, norm, channels='', project_dir='.'):
+    def __init__(self, binary_path, sources, sigma, norm, log10, channels='', project_dir='.'):
         '''Create and track the meta-information of the binary
 
         binary_path - str
@@ -494,6 +496,8 @@ class Binary(Base):
         sigma - False of float
             The option passed to each of the Source.dump() methods
         norm - bool
+            The option passed to each of the Source.dump() methods
+        log10 - bool or list
             The option passed to each of the Source.dump() methods
         channels - list
             A list of the channels/surveys packed into the binary_path file
@@ -712,9 +716,9 @@ class Catalog(Base):
             out_file.write(struct.pack('i', y_dim))
 
             for s in self.valid_sources:
-                s.dump(out_file, order=channels, sigma=sigma, norm=norm)
+                s.dump(out_file, order=channels, sigma=sigma, norm=norm, log10=log10)
 
-        return Binary(binary_out, self.valid_sources, sigma, norm, channels=channels, project_dir=project_dir)
+        return Binary(binary_out, self.valid_sources, sigma, norm, log10, channels=channels, project_dir=project_dir)
 
 class Pink(Base):
     '''Manage a single Pink training session, including the arguments used to run
@@ -903,6 +907,9 @@ class Pink(Base):
         if binary is None:
             binary = self.binary
         
+        if save is not None:
+            save = self._path_build(save)
+
         # I have modified the original version of PINK to also output
         # the transform information. Extract here if it exisists
         transform = f'{self.heat_path}.transform'
@@ -944,6 +951,8 @@ class Pink(Base):
             # data /= data.sum()
             # Simple diagnostic plot
             if plot:
+                from mpl_toolkits.axes_grid1 import make_axes_locatable
+
                 # fig, (ax1, ax2, ax3, ax4) = plt.subplots(1,4)
                 fig, ax = plt.subplots(3,3)
                 params = self.retrieve_som_data(channel=channel)
@@ -965,9 +974,13 @@ class Pink(Base):
                 ax[0,1].imshow(som)
                 ax[0,1].set(title='Trained SOM')
 
-                ax[0,2].imshow(src_img)
+                im_ax02 = ax[0,2].imshow(src_img)
                 ax[0,2].set(title='Source Image')
-            
+                divider = make_axes_locatable(ax[0,2])
+                cax0 = divider.append_axes('right', size='5%', pad=0.05)
+                fig.colorbar(im_ax02, cax=cax0, label='Intensity')
+
+
                 if angle is not None:
                     ang = np.rad2deg(angle[loc[0], loc[1]])
                     flip = flipped[loc[0], loc[1]]
@@ -1011,11 +1024,14 @@ class Pink(Base):
                     # print(angle[loc2[1],loc2[0]], np.rad2deg(angle[loc2[1],loc2[0]]), loc2 )
 
                 else:
+                    fig.delaxes(ax[2,0])
+                    fig.delaxes(ax[2,1])
                     fig.delaxes(ax[1,2])
                     fig.delaxes(ax[1,1])
                     fig.delaxes(ax[1,0])
                 
                 fig.delaxes(ax[2,2])
+                fig.tight_layout()
                 # plt.show() will block, but fig.show() wont
                 if save is None:
                     plt.show()
@@ -1293,21 +1309,23 @@ if __name__ == '__main__':
             cat.collect_valid_sources()
 
             test_bin = cat.dump_binary('TEST_chan.binary', norm=True, sigma=[3., False], log10=[True,False], 
-                                        channels=['FIRST','WISE_W1'],
-                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3')
+                                        channels=['FIRST'],
+                                        # channels=['FIRST','WISE_W1'],
+                                        project_dir='Experiments/FIRST_Norm_Log_3')
 
             print(test_bin)
 
             pink = Pink(test_bin, pink_args={'som-width':2,
-                                            'som-height':2}) 
+                                            'som-height':2,
+                                            'num-iter':5}) 
 
             pink.train()        
-            pink.save('TEST2.pink')
+            pink.save('TEST1.pink')
 
             # ------------------
 
-            test_bin = cat.dump_binary('TEST.binary', norm=True, sigma=[3., False], 
-                                    project_dir='Experiments/FIRST_Norm_3')
+            test_bin = cat.dump_binary('TEST.binary', norm=True, sigma=False, log10=False, 
+                                    project_dir='Experiments/FIRST_Norm_NoLog_NoSig')
 
             print(test_bin)
 
@@ -1315,12 +1333,13 @@ if __name__ == '__main__':
                                             'som-height':2}) 
 
             pink.train()
-            pink.save('TEST.pink')
+            pink.save('TEST2.pink')
 
             # ------------------
 
-            test_bin = cat.dump_binary('TEST_chan.binary', norm=True, log10=[True, False], channels=['FIRST','WISE_W1'],
-                                        project_dir='Experiments/FIRST_WISE_Norm')
+            test_bin = cat.dump_binary('TEST_chan.binary', norm=False, log10=True, sigma=False,
+                                        channels=['FIRST'],
+                                        project_dir='Experiments/FIRST_NoNorm_Log_NoSig')
 
             print(test_bin)
 
@@ -1328,13 +1347,13 @@ if __name__ == '__main__':
                                             'som-height':2}) 
 
             pink.train()        
-            pink.save('TEST2.pink')
+            pink.save('TEST3.pink')
 
             # ------------------
 
-            test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=3.,
-                                        channels=['FIRST','WISE_W1'],
-                                        project_dir='Experiments/FIRST_WISE_Norm_3')
+            test_bin = cat.dump_binary('TEST_chan_3.binary', norm=False, sigma=False, log10=False,
+                                        channels=['FIRST'],
+                                        project_dir='Experiments/FIRST_NoNorm_NoLog_NoSig')
 
             print(test_bin)
 
@@ -1342,15 +1361,15 @@ if __name__ == '__main__':
                                              'som-height':2}) 
 
             pink.train()        
-            pink.save('TEST3.pink')
+            pink.save('TEST4.pink')
             # pink.heatmap(plot=True, image_number=0, apply=False)
             # pink.heatmap(plot=True, image_number=500, apply=False)
             
         elif '-t' == i:
-            for pink_file, out_name in [('Experiments/FIRST_WISE_Norm_Log_3/TEST2.pink', 'example_chan_3_log'),
-                                        ('Experiments/FIRST_Norm_3/TEST.pink', 'example'),
-                                        ('Experiments/FIRST_WISE_Norm/TEST2.pink', 'example_chan'),
-                                        ('Experiments/FIRST_WISE_Norm_3/TEST3.pink', 'example_chan_3')]:
+            for pink_file, out_name in [('Experiments/FIRST_Norm_Log_3/TEST1.pink', 'example_chan_3_log'),
+                                        ('Experiments/FIRST_Norm_NoLog_NoSig/TEST2.pink', 'example'),
+                                        ('Experiments/FIRST_NoNorm_Log_NoSig/TEST3.pink', 'example_chan'),
+                                        ('Experiments/FIRST_NoNorm_NoLog_NoSig/TEST4.pink', 'example_chan_3')]:
 
                     pink = Pink.loader(pink_file)
 
@@ -1388,9 +1407,9 @@ if __name__ == '__main__':
 
                     pink.count_map(plot=True, save=f'{out_name}_count_map.pdf')
 
-            # for i in tqdm(range(10, 100)):
-            #     pink.heatmap(plot=True, image_number=i, apply=False)#, save=f'{plot_dir}/{i}_heatmap.pdf')
-                
+                    for i in tqdm(range(10, 25)):
+                        pink.heatmap(plot=True, image_number=i, apply=False, save=f'{i}_heatmap.pdf')
+                        
 
             # pink.heatmap(plot=True, image_number=60, apply=False)
             # pink.heatmap(plot=True, image_number=61, apply=False)
