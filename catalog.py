@@ -1156,8 +1156,11 @@ class Pink(Base):
             v = [i for items in v for i in items]
             c = Counter(v)
             unique_labels.append(c.keys())
-            mv = max(c.values())
-            max_val = mv if mv > max_val else max_val
+            
+            # Guard agaisnt empty most similar neuron
+            if len(v) > 0:
+                mv = max(c.values())
+                max_val = mv if mv > max_val else max_val
 
         # Work out the unique labels and sort them so that each 
         # sub pplot may be consistent. Calling Counter object 
@@ -1173,10 +1176,12 @@ class Pink(Base):
             c = Counter(v)
             s = sum(c.values())
 
-            ax[k].bar(np.arange(len(unique_labels)),
-                      [c[l]/s for l in unique_labels],
-                      align='center',
-                      tick_label=unique_labels)
+            # Guard agaisnt most similar empty neuron
+            if s > 0:
+                ax[k].bar(np.arange(len(unique_labels)),
+                        [c[l]/s for l in unique_labels],
+                        align='center',
+                        tick_label=unique_labels)
             ax[k].set(ylim=[0,1])
             if k[1] != 0:
                 ax[k].set(yticklabels=[])
@@ -1315,8 +1320,8 @@ if __name__ == '__main__':
 
             print(test_bin)
 
-            pink = Pink(test_bin, pink_args={'som-width':2,
-                                            'som-height':2,
+            pink = Pink(test_bin, pink_args={'som-width':7,
+                                            'som-height':7,
                                             'num-iter':5}) 
 
             pink.train()        
@@ -1329,8 +1334,9 @@ if __name__ == '__main__':
 
             print(test_bin)
 
-            pink = Pink(test_bin, pink_args={'som-width':2,
-                                            'som-height':2}) 
+            pink = Pink(test_bin, pink_args={'som-width':7,
+                                            'som-height':7,
+                                            'num-iter':5}) 
 
             pink.train()
             pink.save('TEST2.pink')
@@ -1343,8 +1349,9 @@ if __name__ == '__main__':
 
             print(test_bin)
 
-            pink = Pink(test_bin, pink_args={'som-width':2,
-                                            'som-height':2}) 
+            pink = Pink(test_bin, pink_args={'som-width':7,
+                                            'som-height':7,
+                                            'num-iter':5}) 
 
             pink.train()        
             pink.save('TEST3.pink')
@@ -1357,19 +1364,99 @@ if __name__ == '__main__':
 
             print(test_bin)
 
-            pink = Pink(test_bin, pink_args={'som-width':2,
-                                             'som-height':2}) 
+            pink = Pink(test_bin, pink_args={'som-width':7,
+                                            'som-height':7,
+                                            'num-iter':5}) 
 
             pink.train()        
             pink.save('TEST4.pink')
+
+            # ------------------
+
+            test_bin = cat.dump_binary('TEST_chan_3.binary', norm=False, sigma=3., log10=False,
+                                        channels=['FIRST'],
+                                        project_dir='Experiments/FIRST_NoNorm_NoLog_3')
+
+            print(test_bin)
+
+            pink = Pink(test_bin, pink_args={'som-width':7,
+                                            'som-height':7,
+                                            'num-iter':5}) 
+
+            pink.train()        
+            pink.save('TEST5.pink')
+
+            # ------------------
+
+            test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=3., log10=[True, False],
+                                        channels=['FIRST','WISE_W1'],
+                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3')
+
+            print(test_bin)
+
+            pink = Pink(test_bin, pink_args={'som-width':7,
+                                            'som-height':7,
+                                            'num-iter':5}) 
+
+            pink.train()        
+            pink.save('TEST5.pink')
+
+            # ------------------
+
+            test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], log10=[True, False],
+                                        channels=['FIRST','WISE_W1'],
+                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3_NoSigWise')
+
+            print(test_bin)
+
+            pink = Pink(test_bin, pink_args={'som-width':7,
+                                            'som-height':7,
+                                            'num-iter':5}) 
+
+            pink.train()        
+            pink.save('TEST6.pink')
+
+            # ------------------
+
+            test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=3., log10=[True, False],
+                                        channels=['FIRST','WISE_W1'],
+                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3_Large')
+
+            print(test_bin)
+
+            pink = Pink(test_bin, pink_args={'som-width':10,
+                                            'som-height':10,
+                                            'num-iter':5}) 
+
+            pink.train()        
+            pink.save('TEST7.pink')
+
+            # ------------------
+
+            test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], log10=[True, False],
+                                        channels=['FIRST','WISE_W1'],
+                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Large')
+
+            print(test_bin)
+
+            pink = Pink(test_bin, pink_args={'som-width':10,
+                                            'som-height':10,
+                                            'num-iter':5}) 
+
+            pink.train()        
+            pink.save('TEST8.pink')
+
             # pink.heatmap(plot=True, image_number=0, apply=False)
             # pink.heatmap(plot=True, image_number=500, apply=False)
             
         elif '-t' == i:
+
+                                        
             for pink_file, out_name in [('Experiments/FIRST_Norm_Log_3/TEST1.pink', 'example_chan_3_log'),
                                         ('Experiments/FIRST_Norm_NoLog_NoSig/TEST2.pink', 'example'),
                                         ('Experiments/FIRST_NoNorm_Log_NoSig/TEST3.pink', 'example_chan'),
-                                        ('Experiments/FIRST_NoNorm_NoLog_NoSig/TEST4.pink', 'example_chan_3')]:
+                                        ('Experiments/FIRST_NoNorm_NoLog_NoSig/TEST4.pink', 'example_chan_3'),
+                                        ('Experiments/FIRST_WISE_Norm_Log_3/TEST5.pink', 'example_chan_3')]:
 
                     pink = Pink.loader(pink_file)
 
@@ -1407,24 +1494,9 @@ if __name__ == '__main__':
 
                     pink.count_map(plot=True, save=f'{out_name}_count_map.pdf')
 
-                    for i in tqdm(range(10, 25)):
+                    for i in tqdm(range(10, 12)):
                         pink.heatmap(plot=True, image_number=i, apply=False, save=f'{i}_heatmap.pdf')
-                        
-
-            # pink.heatmap(plot=True, image_number=60, apply=False)
-            # pink.heatmap(plot=True, image_number=61, apply=False)
-            # pink.heatmap(plot=True, image_number=62, apply=False)
-            # pink.heatmap(plot=True, image_number=63, apply=False)
-            # pink.heatmap(plot=True, image_number=64, apply=False)
-            # pink.heatmap(plot=True, image_number=65, apply=False)
-
-            # pink.heatmap(plot=True, image_number=src-1, apply=False)
-            # pink.heatmap(plot=True, image_number=500, apply=False)
-            # pink.heatmap(plot=True, image_number=100, apply=False)
-            # pink.heatmap(plot=True, image_number=300, apply=False)
-            # pink.heatmap(plot=True, image_number=400, apply=False)
-            # pink.heatmap(plot=True, image_number=450, apply=False)
-            
+                                    
         else:
             print('Options:')
             print(' -r : Run test code to scan in RGZ image data')
