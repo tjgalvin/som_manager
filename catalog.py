@@ -634,42 +634,10 @@ class Catalog(Base):
     def _gen_sources(self):
         '''Generate the Source objects
         '''
+        raise ValueError('Creating objects from Catalogue directly not supported')
         print('Generating the Sources....')
         for index, r in tqdm(self.tab.iterrows()):
             self.sources.append(Source(self.out_dir, position=SkyCoord(ra=r['RA']*u.deg, dec=r['DEC']*u.deg), info=r) )
-
-    def download_validate_images(self, chunk_length=3000):
-        '''Kick off the download_images and is_valid method of each of the 
-        Source objects
-
-        chunk_length - int
-             To avoid overhead of Dask builing the graph, which appear to scale to N**2, 
-             break up the input list into smaller chunks
-        '''
-        @delayed
-        def down(s):
-            s.download_images()
-            return s
-        
-        @delayed
-        def val(s):
-            s.is_valid()
-            return s
-        
-        @delayed
-        def reduce(s):
-            return s
-
-        results = []
-
-        print(f'\nDownloading and validating {len(self.sources)} sources...') 
-        for sub_sources in chunk_sources(self.sources, chunk_length):
-            sub_sources = [down(s) for s in sub_sources]
-            sub_sources = [val(s) for s in sub_sources]
-            with ProgressBar():
-                results += reduce(sub_sources).compute(num_workers=20)
-
-        self.sources = results
 
     def collect_valid_sources(self):
         '''Make a new list of just the valid sources
@@ -694,33 +662,6 @@ class Catalog(Base):
                 # Dirty dirty str replace
                 with open(f"{path}/{s.filename.replace('.png','.pkl').replace('.fits','.pkl')}", 'wb') as out_file:
                     pickle.dump(s, out_file, protocol=3)
-
-    def reproject_valid_sources(self, master='FIRST', chunk_length=3000):
-        '''Proceed to reproject each of the images onto the common pixel grid
-        of the elected master image
-
-        master - str
-              The dictionary key/image survey of the master FITS image to match to
-        '''
-
-        @delayed
-        def reproject(s):
-            s.reproject(master=master)
-            return s
-        
-        @delayed
-        def reduce(s):
-            return s
-
-        results = []
-        print(f'Reprojecting {len(self.valid_sources)} sources...')
-        for sub_sources in chunk_sources(self.valid_sources, chunk_length):
-            valid_sources = [reproject(s) for s in sub_sources]
-
-            with ProgressBar():
-                results += reduce(valid_sources).compute(num_workers=4)
-
-        self.valid_sources = results
 
     def dump_binary(self, binary_out, channels=['FIRST'], sigma=False, norm=False, log10=False, project_dir='.'):
         '''This function produces the binary file that is expected by PINK. It contains
@@ -1032,7 +973,7 @@ class Pink(Base):
                     
                     # TODO: This will fail if the data have not been
                     # normalised...
-                    img = Image.fromarray((src_img*255).astype(np.uint8), mode='L')
+                    img = Image.fromarray((src_img/src_img.max()*255).astype(np.uint8), mode='L')
                     
                     img = img.rotate(-ang)
                     if flip == 1:
