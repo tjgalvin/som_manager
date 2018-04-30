@@ -844,25 +844,32 @@ class Pink(Base):
 
             return (data, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height)
 
-    def show_som(self, channel=0, split=False):
+    def show_som(self, channel=0, mode='raw', color_map='bwr'):
         '''Method to plot the trained SOM, and associated plotting options
 
         channel - int
              The channel from the SOM to plot. Defaults to the first (zero-index) channel
-        split - Bool
-             Slice the neurons into their own subplot axes objects from the returned data
-             matrix from self.retrieve_som_data(). Otherwise just plot it on screen. 
+        mode - str
+             Mode to print the SOM on. 
+             `split` - Slice the neurons into their own subplot axes objects from the returned data
+                       matrix from self.retrieve_som_data(). 
+             `grid` - Plot each channel on its own subfigure
+             `raw`  - Otherwise just plot it on screen. 
+        color_map - str
+            The name of the matplotlib.colormap that will be passed directly to matplotlib.pyplot.get_map()
         '''
+        import matplotlib as mpl
+
         params = self.retrieve_som_data(channel=channel)
         if params is None:
             return
         (data, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height) = params
 
-        if split:
+        if mode == 'split':
             fig, ax = plt.subplots(SOM_width, SOM_height, figsize=(16,16), 
                                 gridspec_kw={'hspace':0.001,'wspace':0.001,
                                             'left':0.001, 'right':0.999,
-                                            'bottom':0.001, 'top':0.9})
+                                            'bottom':0.001, 'top':0.95})
 
             for x in range(SOM_width):
                 for y in range(SOM_height):
@@ -872,18 +879,46 @@ class Pink(Base):
                     ax[x,y].get_xaxis().set_ticks([])
                     ax[x,y].get_yaxis().set_ticks([])
 
-            fig.suptitle((f'Images: {len(self.binary.sources)} - Sigma: {self.binary.sigma} - Norm: {self.binary.norm}\n'
-                            f'Channel: {channel}'))
+            fig.suptitle(f'{self.binary.channels[channel]}')
+            fig.savefig(f'{self.SOM_path}-ch_{channel}-split.pdf')
 
-        else:
+        elif mode == 'raw':
             fig, ax = plt.subplots(1,1)
 
-            im = ax.imshow(data)
+            im = ax.imshow(data, cmap=plt.get_cmap(color_map), norm=mpl.colors.SymLogNorm(0.03))
             ax.get_xaxis().set_ticks([])
-            ax.get_yaxis().set_ticks([])            
+            ax.get_yaxis().set_ticks([])  
+            ax.set(title=f'{self.binary.channels[channel]} Layer')          
             fig.colorbar(im, label='Intensity')
+            fig.savefig(f'{self.SOM_path}-ch_{channel}.pdf')
 
-        fig.savefig(f'{self.SOM_path}-ch_{channel}.pdf')
+        elif mode == 'grid':
+            from mpl_toolkits.axes_grid1 import make_axes_locatable
+            
+            chans = len(self.binary.channels)
+            
+            cols = 2 if chans > 1 else 1
+            rows = int(chans/cols + 0.5)
+
+            fig, axes = plt.subplots(rows, cols)
+            for count, ax in enumerate(fig.axes):
+                params = self.retrieve_som_data(channel=count)
+                if params is None:
+                    return
+                (data, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height) = params
+
+                ax.set(title=self.binary.channels[count])
+
+                im = ax.imshow(data, cmap=plt.get_cmap(color_map))
+                ax.get_xaxis().set_ticks([])
+                ax.get_yaxis().set_ticks([])  
+
+                divider = make_axes_locatable(ax)
+                cax0 = divider.append_axes('right', size='5%', pad=0.05)
+                fig.colorbar(im, cax=cax0, label='Intensity')
+
+            fig.tight_layout()
+            fig.savefig(f'{self.SOM_path}-grid.pdf')
 
     def _process_heatmap(self, image_number=0, plot=False, channel=0, binary=None, save=None):
         '''Function to process the heatmap file produced by the `--map`
@@ -971,10 +1006,10 @@ class Pink(Base):
                 ax[0,0].plot(loc2[1], loc2[0],'b^')
                 ax[0,0].set(title='Euclidean Distance (Heatmap)')
 
-                ax[0,1].imshow(som)
+                ax[0,1].imshow(som, cmap=plt.get_cmap('gnuplot'))
                 ax[0,1].set(title='Trained SOM')
 
-                im_ax02 = ax[0,2].imshow(src_img)
+                im_ax02 = ax[0,2].imshow(src_img, cmap=plt.get_cmap('gnuplot'))
                 ax[0,2].set(title='Source Image')
                 divider = make_axes_locatable(ax[0,2])
                 cax0 = divider.append_axes('right', size='5%', pad=0.05)
@@ -1131,7 +1166,7 @@ class Pink(Base):
         else:
             plt.savefig(save)
 
-    def _label_plot(self, book, shape, save=None, xtick_rotation=None):
+    def _label_plot(self, book, shape, save=None, xtick_rotation=None, color_map='gnuplot2'):
         '''Isolated function to plot the attribute histogram if the data is labelled in 
         nature
 
@@ -1145,9 +1180,13 @@ class Pink(Base):
             If None, show the figure on screen. Otherwise save to the path in save
         xtick_rotation - None or float
             Will rotate the xlabel by rotation
+        color_map - str
+            The name of the matplotlib.colormap that will be passed directly to matplotlib.pyplot.get_map()
         '''
         save = self._path_build(save)
 
+        # Need access to the Normalise and ColorbarBase objects
+        import matplotlib as mpl
         # Step one, get unique items and their counts
         from collections import Counter
         unique_labels = []
@@ -1169,6 +1208,9 @@ class Pink(Base):
         unique_labels = list(set([u for labels in unique_labels for u in labels]))
         unique_labels.sort()
 
+        cmap = plt.get_cmap(color_map)
+        norm = mpl.colors.Normalize(vmin=0, vmax=1)
+
         fig, ax = plt.subplots(nrows=shape[0], ncols=shape[1])
 
         for k, v in book.items():
@@ -1179,17 +1221,23 @@ class Pink(Base):
             # Guard agaisnt most similar empty neuron
             if s > 0:
                 ax[k].bar(np.arange(len(unique_labels)),
-                        [c[l]/s for l in unique_labels],
-                        align='center',
-                        tick_label=unique_labels)
+                         [1]*len(unique_labels),
+                         color=cmap([c[l]/s for l in unique_labels]),
+                         align='center',
+                         tick_label=unique_labels)
             ax[k].set(ylim=[0,1])
-            if k[1] != 0:
+            if k[1] != -1: # disable this for now.
                 ax[k].set(yticklabels=[])
             if k[0] != shape[1]-1:
                 ax[k].set(xticklabels=[])
             else:
                 if xtick_rotation is not None:
                     ax[k].tick_params(axis='x', rotation=xtick_rotation)
+
+        fig.subplots_adjust(right=0.83)
+        cax = fig.add_axes([0.85, 0.10, 0.03, 0.8])
+        cb1 = mpl.colorbar.ColorbarBase(cax, cmap=cmap, norm=norm)
+        cb1.set_label('Contribution')
 
         # fig.tight_layout()
         if save is None:
@@ -1237,7 +1285,7 @@ class Pink(Base):
         if plot:
             self.attribute_plot(book, shape, **kwargs)
 
-    def count_map(self, plot=False, save=None):
+    def count_map(self, plot=False, save=None, color_map='bwr'):
         '''Produce a map of the number of images that best match each neuron. This
         will have the same shape as the SOM grid, and the counts in each cell should
         add to the number of images in the Binary file. For now, just use the heatmap
@@ -1248,7 +1296,11 @@ class Pink(Base):
         save - None or Str
             If None, show the figure onscreen. Otherwise save it to the filename in 
             save
+        color_map - str
+            The name of the matplotlib.colormap that will be passed directly to matplotlib.pyplot.get_map()
         '''
+        import matplotlib as mpl
+        
         if save is not None:
             save = self._path_build(save)
 
@@ -1281,7 +1333,7 @@ class Pink(Base):
             fig.colorbar(im, cax=cax0, label='Counts')
             # cax0.set(label='Counts')
 
-            im2 = ax[1].imshow(data)
+            im2 = ax[1].imshow(data, cmap=plt.get_cmap(color_map))
             ax[1].set(title='Trained SOM')
             ax[1].xaxis.set(ticklabels=[])
             ax[1].yaxis.set(ticklabels=[])
@@ -1336,7 +1388,7 @@ if __name__ == '__main__':
 
             pink = Pink(test_bin, pink_args={'som-width':7,
                                             'som-height':7,
-                                            'num-iter':5}) 
+                                            'num-iter':10}) 
 
             pink.train()
             pink.save('TEST2.pink')
@@ -1351,7 +1403,7 @@ if __name__ == '__main__':
 
             pink = Pink(test_bin, pink_args={'som-width':7,
                                             'som-height':7,
-                                            'num-iter':5}) 
+                                            'num-iter':10}) 
 
             pink.train()        
             pink.save('TEST3.pink')
@@ -1366,7 +1418,7 @@ if __name__ == '__main__':
 
             pink = Pink(test_bin, pink_args={'som-width':7,
                                             'som-height':7,
-                                            'num-iter':5}) 
+                                            'num-iter':10}) 
 
             pink.train()        
             pink.save('TEST4.pink')
@@ -1381,7 +1433,7 @@ if __name__ == '__main__':
 
             pink = Pink(test_bin, pink_args={'som-width':7,
                                             'som-height':7,
-                                            'num-iter':5}) 
+                                            'num-iter':10}) 
 
             pink.train()        
             pink.save('TEST5.pink')
@@ -1396,7 +1448,7 @@ if __name__ == '__main__':
 
             pink = Pink(test_bin, pink_args={'som-width':7,
                                             'som-height':7,
-                                            'num-iter':5}) 
+                                            'num-iter':10}) 
 
             pink.train()        
             pink.save('TEST5.pink')
@@ -1411,7 +1463,7 @@ if __name__ == '__main__':
 
             pink = Pink(test_bin, pink_args={'som-width':7,
                                             'som-height':7,
-                                            'num-iter':5}) 
+                                            'num-iter':10}) 
 
             pink.train()        
             pink.save('TEST6.pink')
@@ -1426,7 +1478,7 @@ if __name__ == '__main__':
 
             pink = Pink(test_bin, pink_args={'som-width':10,
                                             'som-height':10,
-                                            'num-iter':5}) 
+                                            'num-iter':10}) 
 
             pink.train()        
             pink.save('TEST7.pink')
@@ -1441,7 +1493,7 @@ if __name__ == '__main__':
 
             pink = Pink(test_bin, pink_args={'som-width':10,
                                             'som-height':10,
-                                            'num-iter':5}) 
+                                            'num-iter':10}) 
 
             pink.train()        
             pink.save('TEST8.pink')
@@ -1456,12 +1508,18 @@ if __name__ == '__main__':
                                         ('Experiments/FIRST_Norm_NoLog_NoSig/TEST2.pink', 'example'),
                                         ('Experiments/FIRST_NoNorm_Log_NoSig/TEST3.pink', 'example_chan'),
                                         ('Experiments/FIRST_NoNorm_NoLog_NoSig/TEST4.pink', 'example_chan_3'),
-                                        ('Experiments/FIRST_WISE_Norm_Log_3/TEST5.pink', 'example_chan_3')]:
+                                        ('Experiments/FIRST_WISE_Norm_Log_3/TEST5.pink', 'example_chan_3'),
+                                        ('Experiments/FIRST_WISE_Norm_Log_3_Large/TEST7.pink', 'example_chan_3'),
+                                        ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Large/TEST8.pink', 'example_chan_3')]:
 
+                    print(f'Loading {pink_file}\n')
                     pink = Pink.loader(pink_file)
 
                     pink.show_som(channel=0)
+                    pink.show_som(channel=0, mode='split')
                     pink.show_som(channel=1)
+                    pink.show_som(channel=1, mode='split')
+                    pink.show_som(channel=1, mode='grid')
 
                     plot_dir = 'Source_Heatmaps'
                     make_dir(plot_dir)
@@ -1494,8 +1552,10 @@ if __name__ == '__main__':
 
                     pink.count_map(plot=True, save=f'{out_name}_count_map.pdf')
 
-                    for i in tqdm(range(10, 12)):
-                        pink.heatmap(plot=True, image_number=i, apply=False, save=f'{i}_heatmap.pdf')
+                    plt.close('all')
+
+                    # for i in tqdm(range(10, 12)):
+                    #     pink.heatmap(plot=True, image_number=i, apply=False, save=f'{i}_heatmap.pdf')
                                     
         else:
             print('Options:')
