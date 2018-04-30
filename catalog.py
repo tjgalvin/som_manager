@@ -18,6 +18,7 @@ from tqdm import tqdm
 from collections import defaultdict
 from astropy.table import Table
 from astropy.io import fits as pyfits
+from skimage import morphology as skm
 
 from dask import delayed
 from dask.diagnostics import ProgressBar
@@ -27,18 +28,6 @@ from dask.diagnostics import ProgressBar
 import warnings
 from astropy.utils.exceptions import AstropyWarning
 warnings.simplefilter('ignore', category=AstropyWarning)
-
-def chunk_sources(l, chunk_length):
-    '''Function to yield a smaller subset of the passed iterable `l`
-    so that Dask does not take forever building the work graph
-    
-    l - list or list like
-          The list to return in chunks
-    chunk_length - int
-          Length of elements in each chunk
-    '''
-    for i in range(0, len(l), chunk_length):
-        yield l[i:i+chunk_length]
 
 def get_hash(f, blocksize=56332):
     '''Will return the SHA1 hash of the input file
@@ -408,7 +397,16 @@ class Source(Base):
 
         return data
 
-    def dump(self, of, order=None, sigma=False, norm=False, log10=False):
+    def convex_hull(self, data, limit=0.):
+        '''Derive the convex hull mask of the data array, where values are above
+        the `limit` value
+
+        data - numpy.ndarray
+            Work out the convex hull of the data array 
+        '''
+        return skm.convex_hull.convex_hull_image(data>limit)
+
+    def dump(self, of, order=None, sigma=False, norm=False, log10=False, convex=False):
         '''Dump the contents of the common_images to a binary file 
         provided by the of file handler
 
@@ -430,9 +428,15 @@ class Source(Base):
              Log the data. For values which are negative, so come out as NaN, replace
              with the smallest non-Nan value. If list, then then each index in the list
             is used to evaluate the confition for the corresponding channel being dumped
+        convex - bool
+            Will apply a convex hull mask to images. The mask is construted using the first
+            channel image, and then applied to all subsequent channels. There is no need 
+            for convex to be tested for a list or not. 
         '''
         if order is None:
             order = self.common_images.keys()
+
+        hull = None
 
         for count, item in enumerate(order):
             if item not in self.common_images.keys():
@@ -451,26 +455,16 @@ class Source(Base):
                 if (isinstance(norm, bool) and norm) or (isinstance(norm, list) and norm[count]):
                     data = self.normalise(data)
                 
+                if convex:
+                    if hull is None:
+                        hull = self.convex_hull(data)
+                    else:
+                        data[~hull] = data[hull].mean()
+
                 if of is None:
                     return data.astype('float')
                 else:
                     data.astype('f').tofile(of)
-
-    def show_reprojected(self):
-        '''Quick function to look at each of the 
-        '''
-        if len(self.common_images) == 0:
-            return
-
-        for k, v in self.common_images.items():
-            arr = np.load(v)
-
-            fig, ax = plt.subplots(1,1)
-            print('Plotting ', k)
-            print('\tArray size: ', arr.shape)
-            ax.imshow(arr)
-            ax.set(title=k)
-            fig.show()
 
 class Binary(Base):
     '''Wrap up a Binary file into a class to `attach` metadata associated 
@@ -486,7 +480,7 @@ class Binary(Base):
 
         return out
 
-    def __init__(self, binary_path, sources, sigma, norm, log10, channels='', project_dir='.'):
+    def __init__(self, binary_path, sources, sigma, norm, log10, convex, channels='', project_dir='.'):
         '''Create and track the meta-information of the binary
 
         binary_path - str
@@ -498,6 +492,8 @@ class Binary(Base):
         norm - bool
             The option passed to each of the Source.dump() methods
         log10 - bool or list
+            The option passed to each of the Source.dump() methods
+        convex - bool
             The option passed to each of the Source.dump() methods
         channels - list
             A list of the channels/surveys packed into the binary_path file
@@ -511,6 +507,8 @@ class Binary(Base):
         self.channels = channels
         self.sigma = sigma
         self.norm = norm
+        self.log10 = log10
+        self.convex = convex
         self.project_dir = project_dir
 
         if project_dir != '.':
@@ -668,7 +666,8 @@ class Catalog(Base):
                 with open(f"{path}/{s.filename.replace('.png','.pkl').replace('.fits','.pkl')}", 'wb') as out_file:
                     pickle.dump(s, out_file, protocol=3)
 
-    def dump_binary(self, binary_out, channels=['FIRST'], sigma=False, norm=False, log10=False, project_dir='.'):
+    def dump_binary(self, binary_out, channels=['FIRST'], sigma=False, norm=False, log10=False, 
+                         convex=False, project_dir='.'):
         '''This function produces the binary file that is expected by PINK. It contains
         the total number of images to use, the number of chanels and the dimension in and y 
         axis
@@ -687,6 +686,9 @@ class Catalog(Base):
              another
         log10 - bool
              Log the data. For invalid values, insert the smallest non-NaN value in the data
+        convex - bool
+             Derive a convex hull mask from the first channel image, and apply the mask to subsequent
+             channels that are being dumped
         project_dir - str
             The directory to consider as the dumping ground for this 
             binary and associated high level data products
@@ -709,6 +711,10 @@ class Catalog(Base):
         print(f'The number of images to dump: {len(self.valid_sources)}')
         print(f'The number of channels to dump: {len(channels)}')
         print(f'The x and y dimensions: {x_dim}, {y_dim} ')
+        print(f'Sigma clipping: {sigma}')
+        print(f'Normalised: {norm}')
+        print(f'Log10: {log10}')
+        print(f'Convex hull masking: {convex}')
         with open(binary_out, 'wb') as out_file:
             out_file.write(struct.pack('i', len(self.valid_sources)))
             out_file.write(struct.pack('i', len(channels)))
@@ -716,9 +722,9 @@ class Catalog(Base):
             out_file.write(struct.pack('i', y_dim))
 
             for s in self.valid_sources:
-                s.dump(out_file, order=channels, sigma=sigma, norm=norm, log10=log10)
+                s.dump(out_file, order=channels, sigma=sigma, norm=norm, log10=log10, convex=convex)
 
-        return Binary(binary_out, self.valid_sources, sigma, norm, log10, channels=channels, project_dir=project_dir)
+        return Binary(binary_out, self.valid_sources, sigma, norm, log10, convex, channels=channels, project_dir=project_dir)
 
 class Pink(Base):
     '''Manage a single Pink training session, including the arguments used to run
@@ -1365,99 +1371,144 @@ if __name__ == '__main__':
             print('\nValidating sources...')
             cat.collect_valid_sources()
 
-            test_bin = cat.dump_binary('TEST_chan.binary', norm=True, sigma=[3., False], log10=[True,False], 
-                                        channels=['FIRST'],
-                                        # channels=['FIRST','WISE_W1'],
-                                        project_dir='Experiments/FIRST_Norm_Log_3')
+            # test_bin = cat.dump_binary('TEST_chan.binary', norm=True, sigma=[3., False], log10=[True,False], 
+            #                             channels=['FIRST'],
+            #                             # channels=['FIRST','WISE_W1'],
+            #                             project_dir='Experiments/FIRST_Norm_Log_3')
 
-            print(test_bin)
+            # print(test_bin)
 
-            pink = Pink(test_bin, pink_args={'som-width':7,
-                                            'som-height':7,
-                                            'num-iter':5}) 
+            # pink = Pink(test_bin, pink_args={'som-width':7,
+            #                                 'som-height':7,
+            #                                 'num-iter':5}) 
 
-            pink.train()        
-            pink.save('TEST1.pink')
+            # pink.train()        
+            # pink.save('TEST1.pink')
 
-            # ------------------
+            # # ------------------
 
-            test_bin = cat.dump_binary('TEST.binary', norm=True, sigma=False, log10=False, 
-                                    project_dir='Experiments/FIRST_Norm_NoLog_NoSig')
+            # test_bin = cat.dump_binary('TEST.binary', norm=True, sigma=False, log10=False, 
+            #                         project_dir='Experiments/FIRST_Norm_NoLog_NoSig')
 
-            print(test_bin)
+            # print(test_bin)
 
-            pink = Pink(test_bin, pink_args={'som-width':7,
-                                            'som-height':7,
-                                            'num-iter':10}) 
+            # pink = Pink(test_bin, pink_args={'som-width':7,
+            #                                 'som-height':7,
+            #                                 'num-iter':10}) 
 
-            pink.train()
-            pink.save('TEST2.pink')
+            # pink.train()
+            # pink.save('TEST2.pink')
 
-            # ------------------
+            # # ------------------
 
-            test_bin = cat.dump_binary('TEST_chan.binary', norm=False, log10=True, sigma=False,
-                                        channels=['FIRST'],
-                                        project_dir='Experiments/FIRST_NoNorm_Log_NoSig')
+            # test_bin = cat.dump_binary('TEST_chan.binary', norm=False, log10=True, sigma=False,
+            #                             channels=['FIRST'],
+            #                             project_dir='Experiments/FIRST_NoNorm_Log_NoSig')
 
-            print(test_bin)
+            # print(test_bin)
 
-            pink = Pink(test_bin, pink_args={'som-width':7,
-                                            'som-height':7,
-                                            'num-iter':10}) 
+            # pink = Pink(test_bin, pink_args={'som-width':7,
+            #                                 'som-height':7,
+            #                                 'num-iter':10}) 
 
-            pink.train()        
-            pink.save('TEST3.pink')
+            # pink.train()        
+            # pink.save('TEST3.pink')
 
-            # ------------------
+            # # ------------------
 
-            test_bin = cat.dump_binary('TEST_chan_3.binary', norm=False, sigma=False, log10=False,
-                                        channels=['FIRST'],
-                                        project_dir='Experiments/FIRST_NoNorm_NoLog_NoSig')
+            # test_bin = cat.dump_binary('TEST_chan_3.binary', norm=False, sigma=False, log10=False,
+            #                             channels=['FIRST'],
+            #                             project_dir='Experiments/FIRST_NoNorm_NoLog_NoSig')
 
-            print(test_bin)
+            # print(test_bin)
 
-            pink = Pink(test_bin, pink_args={'som-width':7,
-                                            'som-height':7,
-                                            'num-iter':10}) 
+            # pink = Pink(test_bin, pink_args={'som-width':7,
+            #                                 'som-height':7,
+            #                                 'num-iter':10}) 
 
-            pink.train()        
-            pink.save('TEST4.pink')
+            # pink.train()        
+            # pink.save('TEST4.pink')
 
-            # ------------------
+            # # ------------------
 
-            test_bin = cat.dump_binary('TEST_chan_3.binary', norm=False, sigma=3., log10=False,
-                                        channels=['FIRST'],
-                                        project_dir='Experiments/FIRST_NoNorm_NoLog_3')
+            # test_bin = cat.dump_binary('TEST_chan_3.binary', norm=False, sigma=3., log10=False,
+            #                             channels=['FIRST'],
+            #                             project_dir='Experiments/FIRST_NoNorm_NoLog_3')
 
-            print(test_bin)
+            # print(test_bin)
 
-            pink = Pink(test_bin, pink_args={'som-width':7,
-                                            'som-height':7,
-                                            'num-iter':10}) 
+            # pink = Pink(test_bin, pink_args={'som-width':7,
+            #                                 'som-height':7,
+            #                                 'num-iter':10}) 
 
-            pink.train()        
-            pink.save('TEST5.pink')
+            # pink.train()        
+            # pink.save('TEST5.pink')
 
-            # ------------------
+            # # ------------------
 
-            test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=3., log10=[True, False],
-                                        channels=['FIRST','WISE_W1'],
-                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3')
+            # test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=3., log10=[True, False],
+            #                             channels=['FIRST','WISE_W1'],
+            #                             project_dir='Experiments/FIRST_WISE_Norm_Log_3')
 
-            print(test_bin)
+            # print(test_bin)
 
-            pink = Pink(test_bin, pink_args={'som-width':7,
-                                            'som-height':7,
-                                            'num-iter':10}) 
+            # pink = Pink(test_bin, pink_args={'som-width':7,
+            #                                 'som-height':7,
+            #                                 'num-iter':10}) 
 
-            pink.train()        
-            pink.save('TEST5.pink')
+            # pink.train()        
+            # pink.save('TEST5.pink')
+
+            # # ------------------
+
+            # test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], log10=[True, False],
+            #                             channels=['FIRST','WISE_W1'],
+            #                             project_dir='Experiments/FIRST_WISE_Norm_Log_3_NoSigWise')
+
+            # print(test_bin)
+
+            # pink = Pink(test_bin, pink_args={'som-width':7,
+            #                                 'som-height':7,
+            #                                 'num-iter':10}) 
+
+            # pink.train()        
+            # pink.save('TEST6.pink')
+
+            # # ------------------
+
+            # test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=3., log10=[True, False],
+            #                             channels=['FIRST','WISE_W1'],
+            #                             project_dir='Experiments/FIRST_WISE_Norm_Log_3_Large')
+
+            # print(test_bin)
+
+            # pink = Pink(test_bin, pink_args={'som-width':10,
+            #                                 'som-height':10,
+            #                                 'num-iter':10}) 
+
+            # pink.train()        
+            # pink.save('TEST7.pink')
+
+            # # ------------------
+
+            # test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], log10=[True, False],
+            #                             channels=['FIRST','WISE_W1'],
+            #                             project_dir='Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Large')
+
+            # print(test_bin)
+
+            # pink = Pink(test_bin, pink_args={'som-width':10,
+            #                                 'som-height':10,
+            #                                 'num-iter':10}) 
+
+            # pink.train()        
+            # pink.save('TEST8.pink')
 
             # ------------------
 
             test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], log10=[True, False],
-                                        channels=['FIRST','WISE_W1'],
-                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3_NoSigWise')
+                                        channels=['FIRST','WISE_W1'], convex=True,
+                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex')
 
             print(test_bin)
 
@@ -1470,24 +1521,10 @@ if __name__ == '__main__':
 
             # ------------------
 
-            test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=3., log10=[True, False],
+            test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], 
+                                        log10=[True, False], convex=True,
                                         channels=['FIRST','WISE_W1'],
-                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3_Large')
-
-            print(test_bin)
-
-            pink = Pink(test_bin, pink_args={'som-width':10,
-                                            'som-height':10,
-                                            'num-iter':10}) 
-
-            pink.train()        
-            pink.save('TEST7.pink')
-
-            # ------------------
-
-            test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], log10=[True, False],
-                                        channels=['FIRST','WISE_W1'],
-                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Large')
+                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex_Large')
 
             print(test_bin)
 
@@ -1501,16 +1538,15 @@ if __name__ == '__main__':
             # pink.heatmap(plot=True, image_number=0, apply=False)
             # pink.heatmap(plot=True, image_number=500, apply=False)
             
-        elif '-t' == i:
-
-                                        
+        elif '-t' == i:                    
             for pink_file, out_name in [('Experiments/FIRST_Norm_Log_3/TEST1.pink', 'example_chan_3_log'),
                                         ('Experiments/FIRST_Norm_NoLog_NoSig/TEST2.pink', 'example'),
                                         ('Experiments/FIRST_NoNorm_Log_NoSig/TEST3.pink', 'example_chan'),
                                         ('Experiments/FIRST_NoNorm_NoLog_NoSig/TEST4.pink', 'example_chan_3'),
                                         ('Experiments/FIRST_WISE_Norm_Log_3/TEST5.pink', 'example_chan_3'),
                                         ('Experiments/FIRST_WISE_Norm_Log_3_Large/TEST7.pink', 'example_chan_3'),
-                                        ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Large/TEST8.pink', 'example_chan_3')]:
+                                        ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Large/TEST8.pink', 'example_chan_3'),
+                                        ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex_Large/TEST8.pink', 'example_chan_3')]:
 
                     print(f'Loading {pink_file}\n')
                     pink = Pink.loader(pink_file)
