@@ -514,6 +514,10 @@ class Binary(Base):
         if project_dir != '.':
             make_dir(project_dir)
 
+        self.heat_path = f'{self.binary_path}.heat'
+        self.heat_hash = ''
+        self.src_heatmap = None
+
     def get_image(self, index, channel=0):
         '''Return the index-th image that was dumped to the binary image file that
         is managed by this instance of Binary
@@ -714,6 +718,7 @@ class Catalog(Base):
             make_dir(project_dir)
             binary_out = f'{project_dir}/{binary_out}'
 
+        print(f'\nDumping to: {binary_out}')
         print(f'The number of images to dump: {len(sources)}')
         print(f'The number of channels to dump: {len(channels)}')
         print(f'The x and y dimensions: {x_dim}, {y_dim} ')
@@ -806,7 +811,7 @@ class Pink(Base):
         self.SOM_hash = ''
         self.exec_str = ''
 
-        self.validate_binary == validate_binary
+        self.validate_binary = validate_binary
 
         if pink_args:
             self.pink_args = pink_args
@@ -815,9 +820,9 @@ class Pink(Base):
                               'som-height':10}
 
         # Items for the Heatmap. These should be moved to the Binary class
-        self.heat_path = f'{self.binary.binary_path}.heat'
-        self.heat_hash = ''
-        self.src_heatmap = None
+        # self.heat_path = f'{self.binary.binary_path}.heat'
+        # self.heat_hash = ''
+        # self.src_heatmap = None
 
     def update_pink_args(self, **kwargs):
         '''Helper function to update pink arguments that may not have been included
@@ -998,7 +1003,7 @@ class Pink(Base):
 
         # I have modified the original version of PINK to also output
         # the transform information. Extract here if it exisists
-        transform = f'{self.heat_path}.transform'
+        transform = f'{self.binary.heat_path}.transform'
         if os.path.exists(transform):
             with open(transform, 'rb') as in_file:
                 (numberOfImages, width, height, depth) = struct.unpack('i'*4, in_file.read(4*4))
@@ -1020,7 +1025,7 @@ class Pink(Base):
         else:
             angle, flipped = None, None
 
-        with open(self.heat_path, 'rb') as in_file:
+        with open(self.binary.heat_path, 'rb') as in_file:
             numberOfImages, SOM_width, SOM_height, SOM_depth = struct.unpack('i' * 4, in_file.read(4*4))
             
             size = SOM_width * SOM_height * SOM_depth
@@ -1137,7 +1142,7 @@ class Pink(Base):
         
         self.src_heatmap = result
 
-    def heatmap(self, binary=None, plot=False, apply=False, **kwargs):
+    def map(self, binary=None, plot=False, apply=False, **kwargs):
         '''Using Pink, produce a heatmap of the input Binary instance. 
         Note that by default the Binary instance attached to self.binary will be used. 
 
@@ -1168,13 +1173,13 @@ class Pink(Base):
 
         pink_avail = True if shutil.which('Pink') is not None else False        
         # exec_str = f'Pink --cuda-off --map {self.binary.binary_path} {self.heat_path} {self.SOM_path} '
-        exec_str = f'Pink --map {self.binary.binary_path} {self.heat_path} {self.SOM_path} '
+        exec_str = f'Pink --map {self.binary.binary_path} {self.binary.heat_path} {self.SOM_path} '
         exec_str += ' '.join(f'--{k}={v}' for k,v in self.pink_args.items())
         
         if pink_avail:
-            if not os.path.exists(self.heat_path):
+            if not os.path.exists(self.binary.heat_path):
                 subprocess.run(exec_str.split())
-                self.heat_hash = get_hash(self.heat_path)
+                self.binary.heat_hash = get_hash(self.binary.heat_path)
             self._process_heatmap(plot=plot, binary=binary, **kwargs)
             if apply:
                 self._apply_heatmap()
@@ -1428,31 +1433,77 @@ if __name__ == '__main__':
             print(train_bin)
             print(validate_bin)
 
-            sys.exit()
 
-            pink = Pink(test_bin, pink_args={'som-width':7,
-                                            'som-height':7,
-                                            'num-iter':5}) 
+            pink = Pink(train_bin, 
+                        pink_args={'som-width':7,
+                                   'som-height':7,
+                                   'num-iter':1},
+                        validate_binary=validate_bin) 
 
             pink.train()        
             pink.save('TEST1.pink')
+
+            pink.map()
+
+            out_name = 'testing_map'
+
+            pink.show_som(channel=0)
+            pink.show_som(channel=0, mode='split')
+            pink.show_som(channel=1)
+            pink.show_som(channel=1, mode='split')
+            pink.show_som(channel=1, mode='grid')
+
+            pink.map(plot=False, apply=True)
+
+            def source_rgz(s):
+                # If there is only one object, its returned as dict. Test and list it if needed            
+                a = s.rgz_annotations()
+                if a is None:
+                    return ''
+                else:
+                    a = a['object']
+                    if not isinstance(a, list):
+                        a = [a]
+                    return str(len(a))  
+            pink.attribute_heatmap(func=source_rgz, save=f'{out_name}_chan_number_counts.pdf',
+                                   color_map='Blues')
+
+            def source_rgz(s):
+                # If there is only one object, its returned as dict. Test and list it if needed
+                a = s.rgz_annotations()
+                if a is None:
+                    return ''
+                else:
+                    a = a['object']
+                    if not isinstance(a, list):
+                        a = [a]
+                    return [ i['name'] for i in a ]
+            pink.attribute_heatmap(func=source_rgz, xtick_rotation=45, save='example_chan_component_counts.pdf',
+                                   color_map='Blues')
+
+            pink.count_map(plot=True, save=f'{out_name}_count_map.pdf')
+
+            plt.close('all')
+
+            sys.exit()
 
             # # ------------------
 
-            test_bin = cat.dump_binary('TEST_chan.binary', norm=True, sigma=[3., False], log10=[True,False], 
-                                        channels=['FIRST'],
-                                        # channels=['FIRST','WISE_W1'],
-                                        project_dir='Experiments/FIRST_Norm_Log_3')
+            # test_bin = cat.dump_binary('TEST_chan.binary', norm=True, sigma=[3., False], log10=[True,False], 
+            #                             channels=['FIRST'],
+            #                             # channels=['FIRST','WISE_W1'],
+            #                             project_dir='Experiments/FIRST_Norm_Log_3')
 
-            print(test_bin)
+            # print(test_bin)
 
-            pink = Pink(test_bin, pink_args={'som-width':7,
-                                            'som-height':7,
-                                            'num-iter':5}) 
+            # pink = Pink(test_bin, pink_args={'som-width':7,
+            #                                 'som-height':7,
+            #                                 'num-iter':5}) 
 
-            pink.train()        
-            pink.save('TEST1.pink')
+            # pink.train()        
+            # pink.save('TEST1.pink')
 
+            
             # # ------------------
 
             # test_bin = cat.dump_binary('TEST.binary', norm=True, sigma=False, log10=False, 
