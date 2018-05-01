@@ -1,4 +1,6 @@
-'''A manager class to accept a catalogue and generate the sources
+'''A set of management class to interact with PINK. This includes reading in 
+and numpy objects, creating binary files, training/mapping PINK and producing
+results
 '''
 import io
 import os
@@ -7,6 +9,7 @@ import glob
 import shutil
 import pickle
 import struct
+import random
 import subprocess
 import xmltodict as xd
 import hashlib
@@ -19,9 +22,6 @@ from collections import defaultdict
 from astropy.table import Table
 from astropy.io import fits as pyfits
 from skimage import morphology as skm
-
-from dask import delayed
-from dask.diagnostics import ProgressBar
 
 # This will hide the WARNINGs produced by fits.open and an ill
 # crafted FITS header field
@@ -666,8 +666,8 @@ class Catalog(Base):
                 with open(f"{path}/{s.filename.replace('.png','.pkl').replace('.fits','.pkl')}", 'wb') as out_file:
                     pickle.dump(s, out_file, protocol=3)
 
-    def dump_binary(self, binary_out, channels=['FIRST'], sigma=False, norm=False, log10=False, 
-                         convex=False, project_dir='.'):
+    def _write_binary(self, binary_out, channels=['FIRST'], sigma=False, norm=False, log10=False, 
+                            convex=False, project_dir='.', sources=None):
         '''This function produces the binary file that is expected by PINK. It contains
         the total number of images to use, the number of chanels and the dimension in and y 
         axis
@@ -692,12 +692,18 @@ class Catalog(Base):
         project_dir - str
             The directory to consider as the dumping ground for this 
             binary and associated high level data products
+        sources - None or list of Source()
+            If None, use all the sources in the self.valid_sources() attribute as the items to 
+            dump. Otherwise, use the objects passed in the sources keyword
         '''
         if isinstance(channels, str):
             channels = [channels]
 
+        if sources is None:
+            sources = self.valid_sources
+
         # Lets find the total set of image sizes
-        img_sizes = list(set([s.common_shape for s in self.valid_sources]))        
+        img_sizes = list(set([s.common_shape for s in sources]))        
 
         # TODO: Will want to eventually get the smallest number in each direction
         # to use as the image dimensions. For the moment ignore the problem
@@ -708,7 +714,7 @@ class Catalog(Base):
             make_dir(project_dir)
             binary_out = f'{project_dir}/{binary_out}'
 
-        print(f'The number of images to dump: {len(self.valid_sources)}')
+        print(f'The number of images to dump: {len(sources)}')
         print(f'The number of channels to dump: {len(channels)}')
         print(f'The x and y dimensions: {x_dim}, {y_dim} ')
         print(f'Sigma clipping: {sigma}')
@@ -721,10 +727,45 @@ class Catalog(Base):
             out_file.write(struct.pack('i', x_dim))
             out_file.write(struct.pack('i', y_dim))
 
-            for s in self.valid_sources:
+            for s in tqdm(sources):
                 s.dump(out_file, order=channels, sigma=sigma, norm=norm, log10=log10, convex=convex)
 
-        return Binary(binary_out, self.valid_sources, sigma, norm, log10, convex, channels=channels, project_dir=project_dir)
+        return Binary(binary_out, sources, sigma, norm, log10, convex, channels=channels, project_dir=project_dir)
+
+    def dump_binary(self, binary_out, *args, fraction=None, **kwargs):
+        '''This function wraps around the self._write_binary() function. If we are splitting 
+        the data into a training and validation set, do it here, and pass through the relevant
+        information to the _write_binary() method, including the sources for each set. Modify
+        the name in place as we do this. 
+
+        binary_out - str
+               The name of the binary file to write out
+
+        fraction - None of float
+              If fraction is None, write out all files to the single binary file. If it is a
+              float, between 0 to 1, split it into the training and validation sets, and return
+              a Binary instance for each
+        '''
+        if fraction is None:
+            return self._write_binary(binary_out, *args, **kwargs)
+
+        assert 0. <= fraction <= 1., ValueError('Fraction has to be between 0 to 1')
+
+        # First shuffle the list
+        random.shuffle(self.valid_sources)
+
+        # Next calculate the size of the spliting to do
+        pivot = int(len(self.valid_sources)*fraction)
+        train = self.valid_sources[:pivot]
+        validate = self.valid_sources[pivot:]
+
+        print(f'Length of the training set: {len(train)}')
+        print(f'Length of the validate set: {len(validate)}')
+
+        train_bin = self._write_binary(f'{binary_out}_train', *args, sources=train, **kwargs)
+        validate_bin = self._write_binary(f'{binary_out}_validate', *args, sources=validate, **kwargs)
+
+        return (train_bin, validate_bin)
 
 class Pink(Base):
     '''Manage a single Pink training session, including the arguments used to run
@@ -744,16 +785,18 @@ class Pink(Base):
 
         return out
 
-    def __init__(self, binary, pink_args = {}):
+    def __init__(self, binary, pink_args = {}, validate_binary=None):
         '''Create the instance of the Pink object and set appropriate parameters
         
         binary - Binary
              An instance of the Binary class that will be used to train Pink
         pink_args - dict
              The arguments to supply to Pink
+        validate_binary - Binary
+             The Binary object that will be used to validate the results of the training agaisnt
         '''
         if not isinstance(binary, Binary):
-            raise TypeError('binary is expected to be instance of Binary class')
+            raise TypeError(f'binary is expected to be instance of Binary class, not {type(binary)}')
 
         self.trained = False
         self.binary = binary
@@ -763,13 +806,15 @@ class Pink(Base):
         self.SOM_hash = ''
         self.exec_str = ''
 
+        self.validate_binary == validate_binary
+
         if pink_args:
             self.pink_args = pink_args
         else:
             self.pink_args = {'som-width':10,
                               'som-height':10}
 
-        # Items for the Heatmap
+        # Items for the Heatmap. These should be moved to the Binary class
         self.heat_path = f'{self.binary.binary_path}.heat'
         self.heat_hash = ''
         self.src_heatmap = None
@@ -1243,7 +1288,7 @@ class Pink(Base):
         fig.subplots_adjust(right=0.83)
         cax = fig.add_axes([0.85, 0.10, 0.03, 0.8])
         cb1 = mpl.colorbar.ColorbarBase(cax, cmap=cmap, norm=norm)
-        cb1.set_label('Contribution')
+        cb1.set_label('Fraction Contributed per Neuron')
 
         # fig.tight_layout()
         if save is None:
@@ -1371,19 +1416,42 @@ if __name__ == '__main__':
             print('\nValidating sources...')
             cat.collect_valid_sources()
 
-            # test_bin = cat.dump_binary('TEST_chan.binary', norm=True, sigma=[3., False], log10=[True,False], 
-            #                             channels=['FIRST'],
-            #                             # channels=['FIRST','WISE_W1'],
-            #                             project_dir='Experiments/FIRST_Norm_Log_3')
+            # # ------------------
 
-            # print(test_bin)
+            bins      = cat.dump_binary('TEST_chan.binary', norm=True, sigma=[3., False], log10=[True,False], 
+                                        channels=['FIRST'],
+                                        # channels=['FIRST','WISE_W1'],
+                                        project_dir='Experiments/FIRST_Norm_Log_3',
+                                        fraction=0.8)
 
-            # pink = Pink(test_bin, pink_args={'som-width':7,
-            #                                 'som-height':7,
-            #                                 'num-iter':5}) 
+            train_bin, validate_bin = bins
+            print(train_bin)
+            print(validate_bin)
 
-            # pink.train()        
-            # pink.save('TEST1.pink')
+            sys.exit()
+
+            pink = Pink(test_bin, pink_args={'som-width':7,
+                                            'som-height':7,
+                                            'num-iter':5}) 
+
+            pink.train()        
+            pink.save('TEST1.pink')
+
+            # # ------------------
+
+            test_bin = cat.dump_binary('TEST_chan.binary', norm=True, sigma=[3., False], log10=[True,False], 
+                                        channels=['FIRST'],
+                                        # channels=['FIRST','WISE_W1'],
+                                        project_dir='Experiments/FIRST_Norm_Log_3')
+
+            print(test_bin)
+
+            pink = Pink(test_bin, pink_args={'som-width':7,
+                                            'som-height':7,
+                                            'num-iter':5}) 
+
+            pink.train()        
+            pink.save('TEST1.pink')
 
             # # ------------------
 
@@ -1546,6 +1614,7 @@ if __name__ == '__main__':
                                         ('Experiments/FIRST_WISE_Norm_Log_3/TEST5.pink', 'example_chan_3'),
                                         ('Experiments/FIRST_WISE_Norm_Log_3_Large/TEST7.pink', 'example_chan_3'),
                                         ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Large/TEST8.pink', 'example_chan_3'),
+                                        ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex/TEST6.pink', 'example_chan_3'),
                                         ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex_Large/TEST8.pink', 'example_chan_3')]:
 
                     print(f'Loading {pink_file}\n')
@@ -1572,7 +1641,8 @@ if __name__ == '__main__':
                             if not isinstance(a, list):
                                 a = [a]
                             return str(len(a))  
-                    pink.attribute_heatmap(func=source_rgz, save=f'{out_name}_chan_number_counts.pdf')
+                    pink.attribute_heatmap(func=source_rgz, save=f'{out_name}_chan_number_counts.pdf',
+                                          color_map='Blues')
 
                     def source_rgz(s):
                         # If there is only one object, its returned as dict. Test and list it if needed
@@ -1584,7 +1654,8 @@ if __name__ == '__main__':
                             if not isinstance(a, list):
                                 a = [a]
                             return [ i['name'] for i in a ]
-                    pink.attribute_heatmap(func=source_rgz, xtick_rotation=45, save='example_chan_component_counts.pdf')
+                    pink.attribute_heatmap(func=source_rgz, xtick_rotation=45, save='example_chan_component_counts.pdf',
+                                          color_map='Blues')
 
                     pink.count_map(plot=True, save=f'{out_name}_count_map.pdf')
 
