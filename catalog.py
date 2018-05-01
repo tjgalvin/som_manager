@@ -727,7 +727,7 @@ class Catalog(Base):
         print(f'Log10: {log10}')
         print(f'Convex hull masking: {convex}')
         with open(binary_out, 'wb') as out_file:
-            out_file.write(struct.pack('i', len(self.valid_sources)))
+            out_file.write(struct.pack('i', len(sources)))
             out_file.write(struct.pack('i', len(channels)))
             out_file.write(struct.pack('i', x_dim))
             out_file.write(struct.pack('i', y_dim))
@@ -1142,18 +1142,13 @@ class Pink(Base):
         
         self.src_heatmap = result
 
-    def map(self, binary=None, plot=False, apply=False, **kwargs):
+    def map(self, mode='train', plot=False, apply=False, **kwargs):
         '''Using Pink, produce a heatmap of the input Binary instance. 
         Note that by default the Binary instance attached to self.binary will be used. 
 
-        TODO: Make this a `map` function. Ideally should just be a name change. 
-        TODO: Consider making a `map` class? So a separate binary can be easily
-              processed by a trained PINK instance? Or create a new PINK instance
-              for that `map` file?
-
-        binary - Binary or None
-             An instance of the Binary class with sources to match to the SOM. If None, 
-             than use the Binary instance attached to this Pink class instance
+        mode - `train` or `validate`
+             Specify which of the attached Binary instances we should map and process.
+             If neither mode is selected, than raise an error
         plot - bool
              Make an initial diagnostic plot of the SOM and the correponding heatmap.
              This will show the first source of the binary object
@@ -1162,24 +1157,30 @@ class Pink(Base):
         kwargs - dict
              Additional parameters passed directly to _process_heatmap()
         '''
-        if binary is None:
+        modes = ['train','validate']
+        if mode not in modes:
+            raise ValueError(f'binary mode {binary} not supported. Supported modes are {modes}')
+        elif mode == 'train':
             binary = self.binary
+        else:
+            binary = self.validate_binary
+
         if not self.trained:
             return
         if self.SOM_hash != get_hash(self.SOM_path):
             raise ValueError(f'The hash checked failed for {self.SOM_path}')        
         if binary.binary_hash != get_hash(binary.binary_path):
-            raise ValueError(f'The hash checked failed for {self.binary.binary_path}')
+            raise ValueError(f'The hash checked failed for {binary.binary_path}')
 
         pink_avail = True if shutil.which('Pink') is not None else False        
         # exec_str = f'Pink --cuda-off --map {self.binary.binary_path} {self.heat_path} {self.SOM_path} '
-        exec_str = f'Pink --map {self.binary.binary_path} {self.binary.heat_path} {self.SOM_path} '
+        exec_str = f'Pink --map {binary.binary_path} {binary.heat_path} {self.SOM_path} '
         exec_str += ' '.join(f'--{k}={v}' for k,v in self.pink_args.items())
         
         if pink_avail:
-            if not os.path.exists(self.binary.heat_path):
+            if not os.path.exists(binary.heat_path):
                 subprocess.run(exec_str.split())
-                self.binary.heat_hash = get_hash(self.binary.heat_path)
+                binary.heat_hash = get_hash(binary.heat_path)
             self._process_heatmap(plot=plot, binary=binary, **kwargs)
             if apply:
                 self._apply_heatmap()
@@ -1443,7 +1444,10 @@ if __name__ == '__main__':
             pink.train()        
             pink.save('TEST1.pink')
 
-            pink.map()
+            pink.map(binary='train')
+            pink.map(binary='validate')
+
+            sys.exit()
 
             out_name = 'testing_map'
 
