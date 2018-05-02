@@ -819,11 +819,6 @@ class Pink(Base):
             self.pink_args = {'som-width':10,
                               'som-height':10}
 
-        # Items for the Heatmap. These should be moved to the Binary class
-        # self.heat_path = f'{self.binary.binary_path}.heat'
-        # self.heat_hash = ''
-        # self.src_heatmap = None
-
     def update_pink_args(self, **kwargs):
         '''Helper function to update pink arguments that may not have been included
         when creating the class instance
@@ -1132,15 +1127,19 @@ class Pink(Base):
                 plt.close(fig)
             return data
 
-    def _apply_heatmap(self):
+    def _apply_heatmap(self, binary):
         '''Function to loop through the Pink map output (i.e. self.heatmap) and 
         read in as a list each source heatmap
+
+        binary - Binary
+             An instance of the Binary class. Is influenced by the mode of the calling
+             function
         '''
         result = []
-        for index, src in enumerate(self.binary.sources):
+        for index, src in enumerate(binary.sources):
             result.append(self._process_heatmap(image_number=index))
         
-        self.src_heatmap = result
+        binary.src_heatmap = result
 
     def map(self, mode='train', plot=False, apply=False, **kwargs):
         '''Using Pink, produce a heatmap of the input Binary instance. 
@@ -1165,6 +1164,9 @@ class Pink(Base):
         else:
             binary = self.validate_binary
 
+        if binary is None:
+            return
+
         if not self.trained:
             return
         if self.SOM_hash != get_hash(self.SOM_path):
@@ -1183,7 +1185,7 @@ class Pink(Base):
                 binary.heat_hash = get_hash(binary.heat_path)
             self._process_heatmap(plot=plot, binary=binary, **kwargs)
             if apply:
-                self._apply_heatmap()
+                self._apply_heatmap(binary)
         else:
             print('PINK can not be found on this system...')
 
@@ -1319,10 +1321,13 @@ class Pink(Base):
         else:
             self._label_plot(book, shape, **kwargs)
             
-    def attribute_heatmap(self, label=None, plot=True, func=None, *args, **kwargs):
+    def attribute_heatmap(self, mode='train', label=None, plot=True, func=None, *args, **kwargs):
         '''Based on the most likely grid/best match in the heatmap for each source
         build up a distibution plot of each some label/parameters
 
+        mode - `train` or `validate`
+             Specify which of the attached Binary instances we should map and process.
+             If neither mode is selected, than raise an error
         label - str
              The label/value to extract from each source
         plot - bool
@@ -1330,24 +1335,38 @@ class Pink(Base):
         func - Function or callable
              Function that may be applied to each of the instances of Source
         '''
-        shape = self.src_heatmap[0].shape
-        items = self.binary.get_data(label=label, func=func)
+        modes = ['train','validate']
+        if mode not in modes:
+            raise ValueError(f'binary mode {mode} not supported. Supported modes are {modes}')
+        elif mode == 'train':
+            binary = self.binary
+        else:
+            binary = self.validate_binary
+
+        if binary is None:
+            return
+
+        shape = binary.src_heatmap[0].shape
+        items = binary.get_data(label=label, func=func)
 
         book = defaultdict(list)
 
-        for heat, item in zip(self.src_heatmap, items):
+        for heat, item in zip(binary.src_heatmap, items):
             loc = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
             book[loc].append(item)
 
         if plot:
             self.attribute_plot(book, shape, **kwargs)
 
-    def count_map(self, plot=False, save=None, color_map='bwr'):
+    def count_map(self, mode='train', plot=False, save=None, color_map='bwr'):
         '''Produce a map of the number of images that best match each neuron. This
         will have the same shape as the SOM grid, and the counts in each cell should
         add to the number of images in the Binary file. For now, just use the heatmap
         attached to this Pink instance.
 
+        mode - `train` or `validate`
+             Specify which of the attached Binary instances we should map and process.
+             If neither mode is selected, than raise an error
         plot - Bool
             Produce a figure of the counts per neuron
         save - None or Str
@@ -1357,14 +1376,25 @@ class Pink(Base):
             The name of the matplotlib.colormap that will be passed directly to matplotlib.pyplot.get_map()
         '''
         import matplotlib as mpl
-        
+
+        modes = ['train','validate']
+        if mode not in modes:
+            raise ValueError(f'binary mode {binary} not supported. Supported modes are {modes}')
+        elif mode == 'train':
+            binary = self.binary
+        else:
+            binary = self.validate_binary
+
+        if binary is None:
+            return
+
         if save is not None:
             save = self._path_build(save)
 
-        shape = self.src_heatmap[0].shape
+        shape = binary.src_heatmap[0].shape
         book = np.zeros(shape)
 
-        for heat in self.src_heatmap:
+        for heat in binary.src_heatmap:
             loc = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
             book[loc] += 1           
 
@@ -1417,7 +1447,8 @@ if __name__ == '__main__':
 
             cat = Catalog(rgz_dir=rgz_dir)
 
-            cat.save_sources()
+            # Commenting out to let me ctrl+C without killing things
+            # cat.save_sources()
 
             print('\nValidating sources...')
             cat.collect_valid_sources()
@@ -1430,232 +1461,280 @@ if __name__ == '__main__':
                                         project_dir='Experiments/FIRST_Norm_Log_3',
                                         fraction=0.8)
 
+            # train_bin = bins
             train_bin, validate_bin = bins
             print(train_bin)
             print(validate_bin)
-
+            # validate_bin=None
 
             pink = Pink(train_bin, 
                         pink_args={'som-width':7,
                                    'som-height':7,
-                                   'num-iter':1},
+                                   'num-iter':5},
                         validate_binary=validate_bin) 
 
             pink.train()        
+
+            pink.map(mode='train', apply=True)
+            pink.map(mode='validate', apply=True)
+
             pink.save('TEST1.pink')
-
-            pink.map(binary='train')
-            pink.map(binary='validate')
-
-            sys.exit()
-
-            out_name = 'testing_map'
-
-            pink.show_som(channel=0)
-            pink.show_som(channel=0, mode='split')
-            pink.show_som(channel=1)
-            pink.show_som(channel=1, mode='split')
-            pink.show_som(channel=1, mode='grid')
-
-            pink.map(plot=False, apply=True)
-
-            def source_rgz(s):
-                # If there is only one object, its returned as dict. Test and list it if needed            
-                a = s.rgz_annotations()
-                if a is None:
-                    return ''
-                else:
-                    a = a['object']
-                    if not isinstance(a, list):
-                        a = [a]
-                    return str(len(a))  
-            pink.attribute_heatmap(func=source_rgz, save=f'{out_name}_chan_number_counts.pdf',
-                                   color_map='Blues')
-
-            def source_rgz(s):
-                # If there is only one object, its returned as dict. Test and list it if needed
-                a = s.rgz_annotations()
-                if a is None:
-                    return ''
-                else:
-                    a = a['object']
-                    if not isinstance(a, list):
-                        a = [a]
-                    return [ i['name'] for i in a ]
-            pink.attribute_heatmap(func=source_rgz, xtick_rotation=45, save='example_chan_component_counts.pdf',
-                                   color_map='Blues')
-
-            pink.count_map(plot=True, save=f'{out_name}_count_map.pdf')
-
-            plt.close('all')
-
-            sys.exit()
-
-            # # ------------------
-
-            # test_bin = cat.dump_binary('TEST_chan.binary', norm=True, sigma=[3., False], log10=[True,False], 
-            #                             channels=['FIRST'],
-            #                             # channels=['FIRST','WISE_W1'],
-            #                             project_dir='Experiments/FIRST_Norm_Log_3')
-
-            # print(test_bin)
-
-            # pink = Pink(test_bin, pink_args={'som-width':7,
-            #                                 'som-height':7,
-            #                                 'num-iter':5}) 
-
-            # pink.train()        
-            # pink.save('TEST1.pink')
-
-            
-            # # ------------------
-
-            # test_bin = cat.dump_binary('TEST.binary', norm=True, sigma=False, log10=False, 
-            #                         project_dir='Experiments/FIRST_Norm_NoLog_NoSig')
-
-            # print(test_bin)
-
-            # pink = Pink(test_bin, pink_args={'som-width':7,
-            #                                 'som-height':7,
-            #                                 'num-iter':10}) 
-
-            # pink.train()
-            # pink.save('TEST2.pink')
-
-            # # ------------------
-
-            # test_bin = cat.dump_binary('TEST_chan.binary', norm=False, log10=True, sigma=False,
-            #                             channels=['FIRST'],
-            #                             project_dir='Experiments/FIRST_NoNorm_Log_NoSig')
-
-            # print(test_bin)
-
-            # pink = Pink(test_bin, pink_args={'som-width':7,
-            #                                 'som-height':7,
-            #                                 'num-iter':10}) 
-
-            # pink.train()        
-            # pink.save('TEST3.pink')
-
-            # # ------------------
-
-            # test_bin = cat.dump_binary('TEST_chan_3.binary', norm=False, sigma=False, log10=False,
-            #                             channels=['FIRST'],
-            #                             project_dir='Experiments/FIRST_NoNorm_NoLog_NoSig')
-
-            # print(test_bin)
-
-            # pink = Pink(test_bin, pink_args={'som-width':7,
-            #                                 'som-height':7,
-            #                                 'num-iter':10}) 
-
-            # pink.train()        
-            # pink.save('TEST4.pink')
-
-            # # ------------------
-
-            # test_bin = cat.dump_binary('TEST_chan_3.binary', norm=False, sigma=3., log10=False,
-            #                             channels=['FIRST'],
-            #                             project_dir='Experiments/FIRST_NoNorm_NoLog_3')
-
-            # print(test_bin)
-
-            # pink = Pink(test_bin, pink_args={'som-width':7,
-            #                                 'som-height':7,
-            #                                 'num-iter':10}) 
-
-            # pink.train()        
-            # pink.save('TEST5.pink')
-
-            # # ------------------
-
-            # test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=3., log10=[True, False],
-            #                             channels=['FIRST','WISE_W1'],
-            #                             project_dir='Experiments/FIRST_WISE_Norm_Log_3')
-
-            # print(test_bin)
-
-            # pink = Pink(test_bin, pink_args={'som-width':7,
-            #                                 'som-height':7,
-            #                                 'num-iter':10}) 
-
-            # pink.train()        
-            # pink.save('TEST5.pink')
-
-            # # ------------------
-
-            # test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], log10=[True, False],
-            #                             channels=['FIRST','WISE_W1'],
-            #                             project_dir='Experiments/FIRST_WISE_Norm_Log_3_NoSigWise')
-
-            # print(test_bin)
-
-            # pink = Pink(test_bin, pink_args={'som-width':7,
-            #                                 'som-height':7,
-            #                                 'num-iter':10}) 
-
-            # pink.train()        
-            # pink.save('TEST6.pink')
-
-            # # ------------------
-
-            # test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=3., log10=[True, False],
-            #                             channels=['FIRST','WISE_W1'],
-            #                             project_dir='Experiments/FIRST_WISE_Norm_Log_3_Large')
-
-            # print(test_bin)
-
-            # pink = Pink(test_bin, pink_args={'som-width':10,
-            #                                 'som-height':10,
-            #                                 'num-iter':10}) 
-
-            # pink.train()        
-            # pink.save('TEST7.pink')
-
-            # # ------------------
-
-            # test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], log10=[True, False],
-            #                             channels=['FIRST','WISE_W1'],
-            #                             project_dir='Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Large')
-
-            # print(test_bin)
-
-            # pink = Pink(test_bin, pink_args={'som-width':10,
-            #                                 'som-height':10,
-            #                                 'num-iter':10}) 
-
-            # pink.train()        
-            # pink.save('TEST8.pink')
 
             # ------------------
 
-            test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], log10=[True, False],
-                                        channels=['FIRST','WISE_W1'], convex=True,
-                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex')
+            bins = cat.dump_binary('TEST_chan.binary', norm=True, sigma=[3., False], log10=[True,False], 
+                                        channels=['FIRST'],
+                                        # channels=['FIRST','WISE_W1'],
+                                        project_dir='Experiments/FIRST_Norm_Log_3',
+                                        fraction=0.8)
 
-            print(test_bin)
-
-            pink = Pink(test_bin, pink_args={'som-width':7,
+            train_bin, validate_bin = bins
+            print(train_bin)
+            print(validate_bin)
+            
+            pink = Pink(train_bin, pink_args={'som-width':7,
                                             'som-height':7,
-                                            'num-iter':10}) 
+                                            'num-iter':5},
+                        validate_binary=validate_bin) 
 
-            pink.train()        
+            pink.train()    
+            
+            pink.map(mode='train', apply=True)
+            pink.map(mode='validate', apply=True)
+
+            pink.save('TEST1.pink')
+
+            
+            # ------------------
+
+            bins = cat.dump_binary('TEST.binary', norm=True, sigma=False, log10=False, 
+                                    project_dir='Experiments/FIRST_Norm_NoLog_NoSig',
+                                        fraction=0.8)
+
+            train_bin, validate_bin = bins
+            print(train_bin)
+            print(validate_bin)
+
+            pink = Pink(train_bin, pink_args={'som-width':7,
+                                            'som-height':7,
+                                            'num-iter':10},
+                        validate_binary=validate_bin) 
+
+            pink.train()
+
+            pink.map(mode='train', apply=True)
+            pink.map(mode='validate', apply=True)
+
+            pink.save('TEST2.pink')
+
+            # ------------------
+
+            bins = cat.dump_binary('TEST_chan.binary', norm=False, log10=True, sigma=False,
+                                        channels=['FIRST'],
+                                        project_dir='Experiments/FIRST_NoNorm_Log_NoSig',
+                                        fraction=0.8)
+
+            train_bin, validate_bin = bins
+            print(train_bin)
+            print(validate_bin)
+
+            pink = Pink(train_bin, pink_args={'som-width':7,
+                                            'som-height':7,
+                                            'num-iter':10},
+                        validate_binary=validate_bin) 
+
+            pink.train()
+            
+            pink.map(mode='train', apply=True)
+            pink.map(mode='validate', apply=True)
+
+            pink.save('TEST3.pink')
+
+            # ------------------
+
+            bins = cat.dump_binary('TEST_chan_3.binary', norm=False, sigma=False, log10=False,
+                                        channels=['FIRST'],
+                                        project_dir='Experiments/FIRST_NoNorm_NoLog_NoSig',
+                                        fraction=0.8)
+
+            train_bin, validate_bin = bins
+            print(train_bin)
+            print(validate_bin)
+
+            pink = Pink(train_bin, pink_args={'som-width':7,
+                                            'som-height':7,
+                                            'num-iter':10},
+                        validate_binary=validate_bin) 
+
+            pink.train()
+            
+            pink.map(mode='train', apply=True)
+            pink.map(mode='validate', apply=True)
+
+            pink.save('TEST4.pink')
+
+            # ------------------
+
+            bins = cat.dump_binary('TEST_chan_3.binary', norm=False, sigma=3., log10=False,
+                                        channels=['FIRST'],
+                                        project_dir='Experiments/FIRST_NoNorm_NoLog_3',
+                                        fraction=0.8)
+
+            train_bin, validate_bin = bins
+            print(train_bin)
+            print(validate_bin)
+
+            pink = Pink(train_bin, pink_args={'som-width':7,
+                                            'som-height':7,
+                                            'num-iter':10},
+                        validate_binary=validate_bin) 
+
+            pink.train()
+            
+            pink.map(mode='train', apply=True)
+            pink.map(mode='validate', apply=True)
+
+            pink.save('TEST5.pink')
+
+            # ------------------
+
+            bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=3., log10=[True, False],
+                                        channels=['FIRST','WISE_W1'],
+                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3',
+                                        fraction=0.8)
+
+            train_bin, validate_bin = bins
+            print(train_bin)
+            print(validate_bin)
+
+            pink = Pink(train_bin, pink_args={'som-width':7,
+                                            'som-height':7,
+                                            'num-iter':10},
+                        validate_binary=validate_bin) 
+
+            pink.train()
+            
+            pink.map(mode='train', apply=True)
+            pink.map(mode='validate', apply=True)
+
+            pink.save('TEST5.pink')
+
+            # ------------------
+
+            bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], log10=[True, False],
+                                        channels=['FIRST','WISE_W1'],
+                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3_NoSigWise',
+                                        fraction=0.8)
+
+            train_bin, validate_bin = bins
+            print(train_bin)
+            print(validate_bin)
+
+            pink = Pink(train_bin, pink_args={'som-width':7,
+                                            'som-height':7,
+                                            'num-iter':10},
+                        validate_binary=validate_bin) 
+
+            pink.train()
+            
+            pink.map(mode='train', apply=True)
+            pink.map(mode='validate', apply=True)
+
             pink.save('TEST6.pink')
 
             # ------------------
 
-            test_bin = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], 
+            bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=3., log10=[True, False],
+                                        channels=['FIRST','WISE_W1'],
+                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3_Large',
+                                        fraction=0.8)
+
+
+            train_bin, validate_bin = bins
+            print(train_bin)
+            print(validate_bin)
+
+            pink = Pink(train_bin, pink_args={'som-width':10,
+                                            'som-height':10,
+                                            'num-iter':10},
+                        validate_binary=validate_bin) 
+
+            pink.train()
+            
+            pink.map(mode='train', apply=True)
+            pink.map(mode='validate', apply=True)
+
+            pink.save('TEST7.pink')
+
+            # ------------------
+
+            bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], log10=[True, False],
+                                        channels=['FIRST','WISE_W1'],
+                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Large',
+                                        fraction=0.8)
+
+            train_bin, validate_bin = bins
+            print(train_bin)
+            print(validate_bin)
+
+            pink = Pink(train_bin, pink_args={'som-width':10,
+                                            'som-height':10,
+                                            'num-iter':10},
+                        validate_binary=validate_bin) 
+
+            pink.train()
+            
+            pink.map(mode='train', apply=True)
+            pink.map(mode='validate', apply=True)
+
+            pink.save('TEST8.pink')
+
+            # ------------------
+
+            bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], log10=[True, False],
+                                        channels=['FIRST','WISE_W1'], convex=True,
+                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex',
+                                        fraction=0.8)
+
+            train_bin, validate_bin = bins
+            print(train_bin)
+            print(validate_bin)
+
+            pink = Pink(train_bin, pink_args={'som-width':7,
+                                            'som-height':7,
+                                            'num-iter':10},
+                        validate_binary=validate_bin) 
+
+            pink.train() 
+            
+            pink.map(mode='train', apply=True)
+            pink.map(mode='validate', apply=True)
+
+            pink.save('TEST6.pink')
+
+            # ------------------
+
+            bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], 
                                         log10=[True, False], convex=True,
                                         channels=['FIRST','WISE_W1'],
-                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex_Large')
+                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex_Large',
+                                        fraction=0.8)
 
-            print(test_bin)
 
-            pink = Pink(test_bin, pink_args={'som-width':10,
+            train_bin, validate_bin = bins
+            print(train_bin)
+            print(validate_bin)
+
+            pink = Pink(train_bin, pink_args={'som-width':10,
                                             'som-height':10,
-                                            'num-iter':10}) 
+                                            'num-iter':10},
+                        validate_binary=validate_bin) 
 
-            pink.train()        
+            pink.train()
+            
+            pink.map(mode='train', apply=True)
+            pink.map(mode='validate', apply=True)
+
             pink.save('TEST8.pink')
 
             # pink.heatmap(plot=True, image_number=0, apply=False)
