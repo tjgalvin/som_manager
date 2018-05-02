@@ -992,31 +992,7 @@ class Pink(Base):
         if save is not None:
             save = self._path_build(save)
 
-        # I have modified the original version of PINK to also output
-        # the transform information. Extract here if it exisists
-        transform = f'{self.binary.heat_path}.transform'
-        if os.path.exists(transform):
-            with open(transform, 'rb') as in_file:
-                (numberOfImages, width, height, depth) = struct.unpack('i'*4, in_file.read(4*4))
-                som_size = width * height * depth
-                image_width = width
-                image_height = height * depth
-
-                in_file.seek(image_number * 8 * som_size + 4*4)
-                transform_map = struct.unpack('fi' * som_size, in_file.read(4*2*som_size))
-                angle = np.array(transform_map[::2])
-                flipped = np.array(transform_map[1::2])
-                angle = np.ndarray([width, height, depth], 'float', angle)
-                angle = np.swapaxes(angle, 0, 2)
-                angle = np.reshape(angle, (image_height, image_width))
-                flipped = np.ndarray([width, height, depth], 'int', flipped)
-                flipped = np.swapaxes(flipped, 0, 2)
-                flipped = np.reshape(flipped, (image_height, image_width))
-
-        else:
-            angle, flipped = None, None
-
-        with open(self.binary.heat_path, 'rb') as in_file:
+        with open(binary.heat_path, 'rb') as in_file:
             numberOfImages, SOM_width, SOM_height, SOM_depth = struct.unpack('i' * 4, in_file.read(4*4))
             
             size = SOM_width * SOM_height * SOM_depth
@@ -1036,7 +1012,7 @@ class Pink(Base):
                 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
                 # fig, (ax1, ax2, ax3, ax4) = plt.subplots(1,4)
-                fig, ax = plt.subplots(3,3)
+                fig, ax = plt.subplots(1,3)
                 params = self.retrieve_som_data(channel=channel)
                 if params is None:
                     return
@@ -1062,57 +1038,6 @@ class Pink(Base):
                 cax0 = divider.append_axes('right', size='5%', pad=0.05)
                 fig.colorbar(im_ax02, cax=cax0, label='Intensity')
 
-
-                if angle is not None:
-                    ang = np.rad2deg(angle[loc[0], loc[1]])
-                    flip = flipped[loc[0], loc[1]]
-                    
-                    # TODO: This will fail if the data have not been
-                    # normalised...
-                    img = Image.fromarray((src_img/src_img.max()*255).astype(np.uint8), mode='L')
-                    
-                    img = img.rotate(-ang)
-                    if flip == 1:
-                        # print('\tFlipping')
-                        img = img.transpose(Image.FLIP_TOP_BOTTOM)
-                        # img = img.transpose(Image.FLIP_LEFT_RIGHT)
-
-                    ax[1,2].imshow(np.array(img))
-                    ax[1,2].set(title=f'Rotation: {ang:.1f}, Flipped: {flip}')
-
-                    x, y = loc
-                    winning_neuron = som[y*neuron_width:(y+1)*neuron_width,
-                                         x*neuron_width:(x+1)*neuron_width]
-                    ax[1,1].imshow(winning_neuron)
-                    ax[1,1].set(title='Red Marker')
-
-                    y,x = x,y 
-                    winning_neuron = som[y*neuron_width:(y+1)*neuron_width,
-                                         x*neuron_width:(x+1)*neuron_width]
-                    ax[1,0].imshow(winning_neuron)
-                    ax[1,0].set(title='Blue Marker')
-
-                    ax[2,0].imshow(np.rad2deg(angle))
-                    ax[2,0].plot(loc[0], loc[1],'ro')
-                    ax[2,0].plot(loc[1], loc[0],'b^')
-                    ax[2,0].set(title='Rotation')
-
-                    ax[2,1].imshow(flipped)
-                    ax[2,1].plot(loc[0], loc[1],'ro')
-                    ax[2,1].plot(loc[1], loc[0],'b^')
-                    ax[2,1].set(title='Flipped Bit')
-
-                    # print(angle.shape, flipped.shape, data.shape)
-                    # print(angle[loc2[1],loc2[0]], np.rad2deg(angle[loc2[1],loc2[0]]), loc2 )
-
-                else:
-                    fig.delaxes(ax[2,0])
-                    fig.delaxes(ax[2,1])
-                    fig.delaxes(ax[1,2])
-                    fig.delaxes(ax[1,1])
-                    fig.delaxes(ax[1,0])
-                
-                fig.delaxes(ax[2,2])
                 fig.tight_layout()
                 # plt.show() will block, but fig.show() wont
                 if save is None:
@@ -1121,6 +1046,7 @@ class Pink(Base):
                     plt.savefig(save)
 
                 plt.close(fig)
+
             return data
 
     def _apply_heatmap(self, binary):
@@ -1133,7 +1059,7 @@ class Pink(Base):
         '''
         result = []
         for index, src in enumerate(binary.sources):
-            result.append(self._process_heatmap(image_number=index))
+            result.append(self._process_heatmap(binary=binary, image_number=index))
         
         binary.src_heatmap = result
 
@@ -1312,9 +1238,14 @@ class Pink(Base):
         '''
         # Not covinced this is the best way to do it. Perhaps just a 
         # try: -> except: ?
-        if isinstance(book[(0,0)][0], (int, float, complex)):
+        # if isinstance(book[(0,0)][0], (int, float, complex)):
+        #     self._numeric_plot(book, shape, **kwargs)
+        # else:
+        #     self._label_plot(book, shape, **kwargs)
+
+        try:
             self._numeric_plot(book, shape, **kwargs)
-        else:
+        except:
             self._label_plot(book, shape, **kwargs)
             
     def attribute_heatmap(self, mode='train', label=None, plot=True, func=None, *args, **kwargs):
@@ -1406,26 +1337,26 @@ class Pink(Base):
             (data, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height) = params
 
 
-            fig, ax = plt.subplots(1,2)
+            fig, ax = plt.subplots(1,1)
 
-            im = ax[0].imshow(book)
-            ax[0].set(title='Counts per Neuron')
-            ax[0].xaxis.set(ticklabels=[])
-            ax[0].yaxis.set(ticklabels=[])
+            im = ax.imshow(book)
+            ax.set(title='Counts per Neuron')
+            ax.xaxis.set(ticklabels=[])
+            ax.yaxis.set(ticklabels=[])
             
-            divider = make_axes_locatable(ax[0])
+            divider = make_axes_locatable(ax)
             cax0 = divider.append_axes('right', size='5%', pad=0.05)
             fig.colorbar(im, cax=cax0, label='Counts')
             # cax0.set(label='Counts')
 
-            im2 = ax[1].imshow(data, cmap=plt.get_cmap(color_map))
-            ax[1].set(title='Trained SOM')
-            ax[1].xaxis.set(ticklabels=[])
-            ax[1].yaxis.set(ticklabels=[])
+            # im2 = ax[1].imshow(data, cmap=plt.get_cmap(color_map))
+            # ax[1].set(title='Trained SOM')
+            # ax[1].xaxis.set(ticklabels=[])
+            # ax[1].yaxis.set(ticklabels=[])
             
-            divider = make_axes_locatable(ax[1])
-            cax1 = divider.append_axes('right', size='5%', pad=0.05)
-            fig.colorbar(im2, cax=cax1, label='Intensity')
+            # divider = make_axes_locatable(ax[1])
+            # cax1 = divider.append_axes('right', size='5%', pad=0.05)
+            # fig.colorbar(im2, cax=cax1, label='Intensity')
             
             fig.tight_layout()
             # fig.show()
@@ -1468,8 +1399,7 @@ class Pink(Base):
         for src, heat in zip(valid.sources, valid.src_heatmap):
             # print(heat) 
             loc = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
-            loc2 = np.where(heat==heat.min())
-                
+
             # print(heat[loc], heat[loc2], loc, loc2)
             # print('\n\n', v)
             v = [i for items in book[loc] for i in items]
@@ -1827,8 +1757,10 @@ if __name__ == '__main__':
                             if not isinstance(a, list):
                                 a = [a]
                             return str(len(a))  
-                    pink.attribute_heatmap(func=source_rgz, save=f'{out_name}_chan_number_counts.pdf',
-                                          color_map='Blues')
+                    pink.attribute_heatmap(func=source_rgz, save=f'train_{out_name}_chan_number_counts.pdf',
+                                          color_map='Blues', mode='train')
+                    pink.attribute_heatmap(func=source_rgz, save=f'valid_{out_name}_chan_number_counts.pdf',
+                                          color_map='Blues', mode='validate')
 
                     def source_rgz(s):
                         # If there is only one object, its returned as dict. Test and list it if needed
@@ -1840,10 +1772,13 @@ if __name__ == '__main__':
                             if not isinstance(a, list):
                                 a = [a]
                             return [ i['name'] for i in a ]
-                    pink.attribute_heatmap(func=source_rgz, xtick_rotation=45, save='example_chan_component_counts.pdf',
-                                          color_map='Blues')
+                    pink.attribute_heatmap(func=source_rgz, xtick_rotation=45, save=f'train_{out_name}_chan_component_counts.pdf',
+                                          color_map='Blues', mode='train')
+                    pink.attribute_heatmap(func=source_rgz, xtick_rotation=45, save=f'valid_{out_name}_chan_component_counts.pdf',
+                                          color_map='Blues', mode='validate')
 
-                    pink.count_map(plot=True, save=f'{out_name}_count_map.pdf')
+                    pink.count_map(plot=True, save=f'train_{out_name}_count_map.pdf', mode='train')
+                    pink.count_map(plot=True, save=f'valid_{out_name}_count_map.pdf', mode='validate')
 
                     plt.close('all')
 
