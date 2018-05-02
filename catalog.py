@@ -1063,7 +1063,7 @@ class Pink(Base):
         
         binary.src_heatmap = result
 
-    def map(self, mode='train', plot=False, apply=False, **kwargs):
+    def map(self, mode='train', plot=False, apply=True, **kwargs):
         '''Using Pink, produce a heatmap of the input Binary instance. 
         Note that by default the Binary instance attached to self.binary will be used. 
 
@@ -1080,7 +1080,7 @@ class Pink(Base):
         '''
         modes = ['train','validate']
         if mode not in modes:
-            raise ValueError(f'binary mode {binary} not supported. Supported modes are {modes}')
+            raise ValueError(f'binary mode {mode} not supported. Supported modes are {modes}')
         elif mode == 'train':
             binary = self.binary
         else:
@@ -1105,7 +1105,8 @@ class Pink(Base):
             if not os.path.exists(binary.heat_path):
                 subprocess.run(exec_str.split())
                 binary.heat_hash = get_hash(binary.heat_path)
-            self._process_heatmap(plot=plot, binary=binary, **kwargs)
+            if plot:
+                self._process_heatmap(plot=plot, binary=binary, **kwargs)
             if apply:
                 self._apply_heatmap(binary)
         else:
@@ -1408,7 +1409,7 @@ class Pink(Base):
             items = [i for i in c.keys()]
             guess = np.random.choice(items, p=arr / np.sum(arr))
 
-            if guess.split('_')[1] in [i.split('_')[1] for i in source_rgz(src)]:
+            if guess in [i for i in source_rgz(src)]:
                 correct += 1
             else:
                 wrong   += 1
@@ -1421,6 +1422,8 @@ class Pink(Base):
         print(correct, wrong, correct / (correct+wrong))
 
 if __name__ == '__main__':
+
+    NUM_ITER = 2
 
     for i in sys.argv[1:]:
    
@@ -1452,7 +1455,7 @@ if __name__ == '__main__':
             pink = Pink(train_bin, 
                         pink_args={'som-width':7,
                                    'som-height':7,
-                                   'num-iter':5},
+                                   'num-iter':NUM_ITER},
                         validate_binary=validate_bin) 
 
             pink.train()        
@@ -1476,7 +1479,7 @@ if __name__ == '__main__':
             
             pink = Pink(train_bin, pink_args={'som-width':7,
                                             'som-height':7,
-                                            'num-iter':5},
+                                            'num-iter':NUM_ITER},
                         validate_binary=validate_bin) 
 
             pink.train()    
@@ -1499,7 +1502,7 @@ if __name__ == '__main__':
 
             pink = Pink(train_bin, pink_args={'som-width':7,
                                             'som-height':7,
-                                            'num-iter':10},
+                                            'num-iter':NUM_ITER},
                         validate_binary=validate_bin) 
 
             pink.train()
@@ -1522,7 +1525,7 @@ if __name__ == '__main__':
 
             pink = Pink(train_bin, pink_args={'som-width':7,
                                             'som-height':7,
-                                            'num-iter':10},
+                                            'num-iter':NUM_ITER},
                         validate_binary=validate_bin) 
 
             pink.train()
@@ -1545,7 +1548,7 @@ if __name__ == '__main__':
 
             pink = Pink(train_bin, pink_args={'som-width':7,
                                             'som-height':7,
-                                            'num-iter':10},
+                                            'num-iter':NUM_ITER},
                         validate_binary=validate_bin) 
 
             pink.train()
@@ -1568,7 +1571,7 @@ if __name__ == '__main__':
 
             pink = Pink(train_bin, pink_args={'som-width':7,
                                             'som-height':7,
-                                            'num-iter':10},
+                                            'num-iter':NUM_ITER},
                         validate_binary=validate_bin) 
 
             pink.train()
@@ -1591,7 +1594,7 @@ if __name__ == '__main__':
 
             pink = Pink(train_bin, pink_args={'som-width':7,
                                             'som-height':7,
-                                            'num-iter':10},
+                                            'num-iter':NUM_ITER},
                         validate_binary=validate_bin) 
 
             pink.train()
@@ -1614,7 +1617,7 @@ if __name__ == '__main__':
 
             pink = Pink(train_bin, pink_args={'som-width':7,
                                             'som-height':7,
-                                            'num-iter':10},
+                                            'num-iter':NUM_ITER},
                         validate_binary=validate_bin) 
 
             pink.train()
@@ -1638,7 +1641,7 @@ if __name__ == '__main__':
 
             pink = Pink(train_bin, pink_args={'som-width':10,
                                             'som-height':10,
-                                            'num-iter':10},
+                                            'num-iter':NUM_ITER},
                         validate_binary=validate_bin) 
 
             pink.train()
@@ -1661,7 +1664,7 @@ if __name__ == '__main__':
 
             pink = Pink(train_bin, pink_args={'som-width':10,
                                             'som-height':10,
-                                            'num-iter':10},
+                                            'num-iter':NUM_ITER},
                         validate_binary=validate_bin) 
 
             pink.train()
@@ -1684,7 +1687,7 @@ if __name__ == '__main__':
 
             pink = Pink(train_bin, pink_args={'som-width':7,
                                             'som-height':7,
-                                            'num-iter':10},
+                                            'num-iter':NUM_ITER},
                         validate_binary=validate_bin) 
 
             pink.train() 
@@ -1709,7 +1712,7 @@ if __name__ == '__main__':
 
             pink = Pink(train_bin, pink_args={'som-width':10,
                                             'som-height':10,
-                                            'num-iter':10},
+                                            'num-iter':NUM_ITER},
                         validate_binary=validate_bin) 
 
             pink.train()
