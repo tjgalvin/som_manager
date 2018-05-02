@@ -110,11 +110,7 @@ class Source(Base):
     def __str__(self):
         '''Make the string output meaningful
         '''
-        out = f'{self.pos}\n'
-
-        if len(self.images) > 0:
-            out += f'{len(self.images)} downloaded...\n'
-
+        out = self.rgz_path
         return out
 
     def __init__(self, out_dir, rgz_path=None, position=None, cutout_size=5., info=None):
@@ -1358,6 +1354,8 @@ class Pink(Base):
         if plot:
             self.attribute_plot(book, shape, **kwargs)
 
+        return book
+
     def count_map(self, mode='train', plot=False, save=None, color_map='bwr'):
         '''Produce a map of the number of images that best match each neuron. This
         will have the same shape as the SOM grid, and the counts in each cell should
@@ -1437,6 +1435,60 @@ class Pink(Base):
                 plt.savefig(save)
 
         return book
+
+    def validator(self):
+        '''The code to check the validate data agaisnt the training data. Use the distribution
+        of labels from some neuron from the training data to predict the label of the source
+        from the validate set
+        '''
+        from collections import Counter
+
+        # Get items
+        train = self.binary
+        valid = self.validate_binary
+
+        # Get the `book` object from the training data with label types
+        def source_rgz(s):
+            # If there is only one object, its returned as dict. Test and list it if needed
+            a = s.rgz_annotations()
+            if a is None:
+                return ''
+            else:
+                a = a['object']
+                if not isinstance(a, list):
+                    a = [a]
+                return [ i['name'] for i in a ]
+
+        book = self.attribute_heatmap(func=source_rgz, plot=False)
+
+        correct = 0
+        wrong   = 0
+
+        # print(book)
+        for src, heat in zip(valid.sources, valid.src_heatmap):
+            # print(heat) 
+            loc = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
+            loc2 = np.where(heat==heat.min())
+                
+            # print(heat[loc], heat[loc2], loc, loc2)
+            # print('\n\n', v)
+            v = [i for items in book[loc] for i in items]
+            c = Counter(v)
+            arr = np.array([i for i in c.values()])
+            items = [i for i in c.keys()]
+            guess = np.random.choice(items, p=arr / np.sum(arr))
+
+            if guess.split('_')[1] in [i.split('_')[1] for i in source_rgz(src)]:
+                correct += 1
+            else:
+                wrong   += 1
+
+            # print( source_rgz( src ) , guess )
+
+            # print(items, arr / np.sum(arr))
+            # print(len(v), type(sum(c.values())))
+
+        print(correct, wrong, correct / (correct+wrong))
 
 if __name__ == '__main__':
 
@@ -1763,7 +1815,7 @@ if __name__ == '__main__':
                     plot_dir = 'Source_Heatmaps'
                     make_dir(plot_dir)
 
-                    pink.heatmap(plot=False, apply=True)
+                    # pink.heatmap(plot=False, apply=True)
 
                     def source_rgz(s):
                         # If there is only one object, its returned as dict. Test and list it if needed            
@@ -1797,9 +1849,17 @@ if __name__ == '__main__':
 
                     # for i in tqdm(range(10, 12)):
                     #     pink.heatmap(plot=True, image_number=i, apply=False, save=f'{i}_heatmap.pdf')
-                                    
+
+        elif '-v' == i:
+            print('Running the validator...') 
+            print('loading..')
+            pink = Pink.loader('Experiments/FIRST_Norm_Log_3/TEST1.pink')
+            pink = Pink.loader('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex/TEST6.pink')
+            pink.validator()
+
         else:
             print('Options:')
             print(' -r : Run test code to scan in RGZ image data')
             print(' -t : Run test code for the Transform outputs and heatmap')
+            print(' -v : Run test code for Validator')
             sys.exit(0)
