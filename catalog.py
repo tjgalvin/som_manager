@@ -1105,6 +1105,8 @@ class Pink(Base):
             if not os.path.exists(binary.heat_path):
                 subprocess.run(exec_str.split())
                 binary.heat_hash = get_hash(binary.heat_path)
+            else:
+                print('Not running PINK to map, file exists.\n')
             if plot:
                 self._process_heatmap(plot=plot, binary=binary, **kwargs)
             if apply:
@@ -1195,6 +1197,10 @@ class Pink(Base):
 
         fig, ax = plt.subplots(nrows=shape[0], ncols=shape[1])
 
+        # Set empty axis labels for everything
+        for a in ax.flatten():
+            a.set(xticklabels=[], yticklabels=[])
+            
         for k, v in book.items():
             v = [i for items in v for i in items]
             c = Counter(v)
@@ -1249,10 +1255,12 @@ class Pink(Base):
         except:
             self._label_plot(book, shape, **kwargs)
             
-    def attribute_heatmap(self, mode='train', label=None, plot=True, func=None, *args, **kwargs):
+    def attribute_heatmap(self, trials=1, mode='train', label=None, plot=True, func=None, *args, **kwargs):
         '''Based on the most likely grid/best match in the heatmap for each source
         build up a distibution plot of each some label/parameters
 
+        trials - int
+             The number of times to use the heatmap to select a position to put something
         mode - `train` or `validate`
              Specify which of the attached Binary instances we should map and process.
              If neither mode is selected, than raise an error
@@ -1279,9 +1287,22 @@ class Pink(Base):
 
         book = defaultdict(list)
 
-        for heat, item in zip(binary.src_heatmap, items):
-            loc = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
-            book[loc].append(item)
+        DISTANCE = False if trials > 1 else True
+        
+        pixels = range(np.prod(shape))
+        for _ in range(trials):
+            for heat, item in zip(binary.src_heatmap, items):
+                if DISTANCE:
+                    loc = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
+                else:
+                    prob = 1. / heat
+                    prob = prob / prob.sum()
+                    rand_pos = np.random.choice(pixels, p=prob.flatten())
+                    x = rand_pos // heat.shape[0]
+                    y = rand_pos % heat.shape[1]
+                    loc = (x,y)
+                
+                book[loc].append(item)
 
         if plot:
             self.attribute_plot(book, shape, **kwargs)
@@ -1309,7 +1330,7 @@ class Pink(Base):
 
         modes = ['train','validate']
         if mode not in modes:
-            raise ValueError(f'binary mode {binary} not supported. Supported modes are {modes}')
+            raise ValueError(f'binary mode {mode} not supported. Supported modes are {modes}')
         elif mode == 'train':
             binary = self.binary
         else:
@@ -1340,7 +1361,7 @@ class Pink(Base):
 
             fig, ax = plt.subplots(1,1)
 
-            im = ax.imshow(book)
+            im = ax.imshow(book, vmin=0)
             ax.set(title='Counts per Neuron')
             ax.xaxis.set(ticklabels=[])
             ax.yaxis.set(ticklabels=[])
@@ -1368,10 +1389,13 @@ class Pink(Base):
 
         return book
 
-    def validator(self):
+    def validator(self, trials=1):
         '''The code to check the validate data agaisnt the training data. Use the distribution
         of labels from some neuron from the training data to predict the label of the source
         from the validate set
+
+        trials - int
+             The number of times to use the heatmap to select a position to put something
         '''
         from collections import Counter
 
@@ -1391,39 +1415,42 @@ class Pink(Base):
                     a = [a]
                 return [ i['name'] for i in a ]
 
-        book = self.attribute_heatmap(func=source_rgz, plot=False)
+        book = self.attribute_heatmap(func=source_rgz, trials=trials, plot=False)
 
         correct = 0
         wrong   = 0
 
-        # print(book)
         for src, heat in zip(valid.sources, valid.src_heatmap):
-            # print(heat) 
             loc = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
 
-            # print(heat[loc], heat[loc2], loc, loc2)
-            # print('\n\n', v)
             v = [i for items in book[loc] for i in items]
             c = Counter(v)
             arr = np.array([i for i in c.values()])
             items = [i for i in c.keys()]
-            guess = np.random.choice(items, p=arr / np.sum(arr))
+            guess = items[np.argmax(arr)]
+            # guess = np.random.choice(items, p=arr / np.sum(arr))
 
             if guess in [i for i in source_rgz(src)]:
                 correct += 1
             else:
                 wrong   += 1
 
-            # print( source_rgz( src ) , guess )
-
-            # print(items, arr / np.sum(arr))
-            # print(len(v), type(sum(c.values())))
-
         print(correct, wrong, correct / (correct+wrong))
 
 if __name__ == '__main__':
 
-    NUM_ITER = 2
+    FRACTION = 0.5
+    PROJECTS_DIR = 'Experiments_2'
+    NUM_ITER = 10
+    COLLECTION = [('Experiments/FIRST_Norm_Log_3/TEST1.pink', 'plots'),
+                  ('Experiments/FIRST_Norm_NoLog_NoSig/TEST2.pink', 'plots'),
+                  ('Experiments/FIRST_NoNorm_Log_NoSig/TEST3.pink', 'plots'),
+                  ('Experiments/FIRST_NoNorm_NoLog_NoSig/TEST4.pink', 'plots'),
+                  ('Experiments/FIRST_WISE_Norm_Log_3/TEST5.pink', 'plots'),
+                  ('Experiments/FIRST_WISE_Norm_Log_3_Large/TEST7.pink', 'plots'),
+                  ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Large/TEST8.pink', 'plots'),
+                  ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex/TEST6.pink', 'plots'),
+                  ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex_Large/TEST8.pink', 'plots')]
 
     for i in sys.argv[1:]:
    
@@ -1443,8 +1470,8 @@ if __name__ == '__main__':
             bins      = cat.dump_binary('TEST_chan.binary', norm=True, sigma=[3., False], log10=[True,False], 
                                         channels=['FIRST'],
                                         # channels=['FIRST','WISE_W1'],
-                                        project_dir='Experiments/FIRST_Norm_Log_3',
-                                        fraction=0.8)
+                                        project_dir=f'{PROJECTS_DIR}/FIRST_Norm_Log_3',
+                                        fraction=FRACTION)
 
             # train_bin = bins
             train_bin, validate_bin = bins
@@ -1469,9 +1496,8 @@ if __name__ == '__main__':
 
             bins = cat.dump_binary('TEST_chan.binary', norm=True, sigma=[3., False], log10=[True,False], 
                                         channels=['FIRST'],
-                                        # channels=['FIRST','WISE_W1'],
-                                        project_dir='Experiments/FIRST_Norm_Log_3',
-                                        fraction=0.8)
+                                        project_dir=f'{PROJECTS_DIR}/FIRST_Norm_Log_3',
+                                        fraction=FRACTION)
 
             train_bin, validate_bin = bins
             print(train_bin)
@@ -1493,8 +1519,8 @@ if __name__ == '__main__':
             # ------------------
 
             bins = cat.dump_binary('TEST.binary', norm=True, sigma=False, log10=False, 
-                                    project_dir='Experiments/FIRST_Norm_NoLog_NoSig',
-                                        fraction=0.8)
+                                    project_dir=f'{PROJECTS_DIR}/FIRST_Norm_NoLog_NoSig',
+                                        fraction=FRACTION)
 
             train_bin, validate_bin = bins
             print(train_bin)
@@ -1516,8 +1542,8 @@ if __name__ == '__main__':
 
             bins = cat.dump_binary('TEST_chan.binary', norm=False, log10=True, sigma=False,
                                         channels=['FIRST'],
-                                        project_dir='Experiments/FIRST_NoNorm_Log_NoSig',
-                                        fraction=0.8)
+                                        project_dir=f'{PROJECTS_DIR}/FIRST_NoNorm_Log_NoSig',
+                                        fraction=FRACTION)
 
             train_bin, validate_bin = bins
             print(train_bin)
@@ -1539,8 +1565,8 @@ if __name__ == '__main__':
 
             bins = cat.dump_binary('TEST_chan_3.binary', norm=False, sigma=False, log10=False,
                                         channels=['FIRST'],
-                                        project_dir='Experiments/FIRST_NoNorm_NoLog_NoSig',
-                                        fraction=0.8)
+                                        project_dir=f'{PROJECTS_DIR}/FIRST_NoNorm_NoLog_NoSig',
+                                        fraction=FRACTION)
 
             train_bin, validate_bin = bins
             print(train_bin)
@@ -1562,8 +1588,8 @@ if __name__ == '__main__':
 
             bins = cat.dump_binary('TEST_chan_3.binary', norm=False, sigma=3., log10=False,
                                         channels=['FIRST'],
-                                        project_dir='Experiments/FIRST_NoNorm_NoLog_3',
-                                        fraction=0.8)
+                                        project_dir=f'{PROJECTS_DIR}/FIRST_NoNorm_NoLog_3',
+                                        fraction=FRACTION)
 
             train_bin, validate_bin = bins
             print(train_bin)
@@ -1585,8 +1611,8 @@ if __name__ == '__main__':
 
             bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=3., log10=[True, False],
                                         channels=['FIRST','WISE_W1'],
-                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3',
-                                        fraction=0.8)
+                                        project_dir=f'{PROJECTS_DIR}/FIRST_WISE_Norm_Log_3',
+                                        fraction=FRACTION)
 
             train_bin, validate_bin = bins
             print(train_bin)
@@ -1608,8 +1634,8 @@ if __name__ == '__main__':
 
             bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], log10=[True, False],
                                         channels=['FIRST','WISE_W1'],
-                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3_NoSigWise',
-                                        fraction=0.8)
+                                        project_dir=f'{PROJECTS_DIR}/FIRST_WISE_Norm_Log_3_NoSigWise',
+                                        fraction=FRACTION)
 
             train_bin, validate_bin = bins
             print(train_bin)
@@ -1631,8 +1657,8 @@ if __name__ == '__main__':
 
             bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=3., log10=[True, False],
                                         channels=['FIRST','WISE_W1'],
-                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3_Large',
-                                        fraction=0.8)
+                                        project_dir=f'{PROJECTS_DIR}/FIRST_WISE_Norm_Log_3_Large',
+                                        fraction=FRACTION)
 
 
             train_bin, validate_bin = bins
@@ -1655,8 +1681,8 @@ if __name__ == '__main__':
 
             bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], log10=[True, False],
                                         channels=['FIRST','WISE_W1'],
-                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Large',
-                                        fraction=0.8)
+                                        project_dir=f'{PROJECTS_DIR}/FIRST_WISE_Norm_Log_3_NoSigWise_Large',
+                                        fraction=FRACTION)
 
             train_bin, validate_bin = bins
             print(train_bin)
@@ -1678,8 +1704,8 @@ if __name__ == '__main__':
 
             bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], log10=[True, False],
                                         channels=['FIRST','WISE_W1'], convex=True,
-                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex',
-                                        fraction=0.8)
+                                        project_dir=f'{PROJECTS_DIR}/FIRST_WISE_Norm_Log_3_NoSigWise_Convex',
+                                        fraction=FRACTION)
 
             train_bin, validate_bin = bins
             print(train_bin)
@@ -1702,8 +1728,8 @@ if __name__ == '__main__':
             bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], 
                                         log10=[True, False], convex=True,
                                         channels=['FIRST','WISE_W1'],
-                                        project_dir='Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex_Large',
-                                        fraction=0.8)
+                                        project_dir=f'{PROJECTS_DIR}/FIRST_WISE_Norm_Log_3_NoSigWise_Convex_Large',
+                                        fraction=FRACTION)
 
 
             train_bin, validate_bin = bins
@@ -1726,15 +1752,7 @@ if __name__ == '__main__':
             # pink.heatmap(plot=True, image_number=500, apply=False)
             
         elif '-t' == i:                    
-            for pink_file, out_name in [('Experiments/FIRST_Norm_Log_3/TEST1.pink', 'example_chan_3_log'),
-                                        ('Experiments/FIRST_Norm_NoLog_NoSig/TEST2.pink', 'example'),
-                                        ('Experiments/FIRST_NoNorm_Log_NoSig/TEST3.pink', 'example_chan'),
-                                        ('Experiments/FIRST_NoNorm_NoLog_NoSig/TEST4.pink', 'example_chan_3'),
-                                        ('Experiments/FIRST_WISE_Norm_Log_3/TEST5.pink', 'example_chan_3'),
-                                        ('Experiments/FIRST_WISE_Norm_Log_3_Large/TEST7.pink', 'example_chan_3'),
-                                        ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Large/TEST8.pink', 'example_chan_3'),
-                                        ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex/TEST6.pink', 'example_chan_3'),
-                                        ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex_Large/TEST8.pink', 'example_chan_3')]:
+            for pink_file, out_name in COLLECTION:
 
                     print(f'Loading {pink_file}\n')
                     pink = Pink.loader(pink_file)
@@ -1745,12 +1763,7 @@ if __name__ == '__main__':
                     pink.show_som(channel=1, mode='split')
                     pink.show_som(channel=1, mode='grid')
 
-                    plot_dir = 'Source_Heatmaps'
-                    make_dir(plot_dir)
-
-                    # pink.heatmap(plot=False, apply=True)
-
-                    def source_rgz(s):
+                    def reduce1(s):
                         # If there is only one object, its returned as dict. Test and list it if needed            
                         a = s.rgz_annotations()
                         if a is None:
@@ -1760,12 +1773,12 @@ if __name__ == '__main__':
                             if not isinstance(a, list):
                                 a = [a]
                             return str(len(a))  
-                    pink.attribute_heatmap(func=source_rgz, save=f'train_{out_name}_chan_number_counts.pdf',
+                    pink.attribute_heatmap(func=reduce1, save=f'train_number_counts.pdf',
                                           color_map='Blues', mode='train')
-                    pink.attribute_heatmap(func=source_rgz, save=f'valid_{out_name}_chan_number_counts.pdf',
+                    pink.attribute_heatmap(func=reduce1, save=f'valid_number_counts.pdf',
                                           color_map='Blues', mode='validate')
 
-                    def source_rgz(s):
+                    def reduce2(s):
                         # If there is only one object, its returned as dict. Test and list it if needed
                         a = s.rgz_annotations()
                         if a is None:
@@ -1775,13 +1788,47 @@ if __name__ == '__main__':
                             if not isinstance(a, list):
                                 a = [a]
                             return [ i['name'] for i in a ]
-                    pink.attribute_heatmap(func=source_rgz, xtick_rotation=45, save=f'train_{out_name}_chan_component_counts.pdf',
+                    pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'train_label_counts.pdf',
                                           color_map='Blues', mode='train')
-                    pink.attribute_heatmap(func=source_rgz, xtick_rotation=45, save=f'valid_{out_name}_chan_component_counts.pdf',
+                    pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'valid_label_counts.pdf',
+                                          color_map='Blues', mode='validate')
+                    pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'train_trials_label_counts.pdf',
+                                          color_map='Blues', mode='train', trials=100)
+                    pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'valid_trials_label_counts.pdf',
+                                          color_map='Blues', mode='validate', trials=200)
+
+                    def reduce3(s):
+                        # If there is only one object, its returned as dict. Test and list it if needed
+                        a = s.rgz_annotations()
+                        if a is None:
+                            return ''
+                        else:
+                            a = a['object']
+                            if not isinstance(a, list):
+                                a = [a]
+                            return [ i['name'].split('_')[0] for i in a ]
+                    pink.attribute_heatmap(func=reduce3, xtick_rotation=90, save=f'train_label_comp_counts.pdf',
+                                          color_map='Blues', mode='train')
+                    pink.attribute_heatmap(func=reduce3, xtick_rotation=90, save=f'valid_label_comp_counts.pdf',
                                           color_map='Blues', mode='validate')
 
-                    pink.count_map(plot=True, save=f'train_{out_name}_count_map.pdf', mode='train')
-                    pink.count_map(plot=True, save=f'valid_{out_name}_count_map.pdf', mode='validate')
+                    def reduce4(s):
+                        # If there is only one object, its returned as dict. Test and list it if needed
+                        a = s.rgz_annotations()
+                        if a is None:
+                            return ''
+                        else:
+                            a = a['object']
+                            if not isinstance(a, list):
+                                a = [a]
+                            return [ i['name'].split('_')[1] for i in a ]
+                    pink.attribute_heatmap(func=reduce4, xtick_rotation=90, save=f'train_label_peak_counts.pdf',
+                                          color_map='Blues', mode='train')
+                    pink.attribute_heatmap(func=reduce4, xtick_rotation=90, save=f'valid_label_peak_counts.pdf',
+                                          color_map='Blues', mode='validate')
+
+                    pink.count_map(plot=True, save=f'train_count_map.pdf', mode='train')
+                    pink.count_map(plot=True, save=f'valid_count_map.pdf', mode='validate')
 
                     plt.close('all')
 
@@ -1789,11 +1836,12 @@ if __name__ == '__main__':
                     #     pink.heatmap(plot=True, image_number=i, apply=False, save=f'{i}_heatmap.pdf')
 
         elif '-v' == i:
-            print('Running the validator...') 
-            print('loading..')
-            pink = Pink.loader('Experiments/FIRST_Norm_Log_3/TEST1.pink')
-            pink = Pink.loader('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex/TEST6.pink')
-            pink.validator()
+            for pink_file, out_name in COLLECTION:
+                print(pink_file)
+                pink = Pink.loader(pink_file)
+                # pink.validator(trials=500)
+                pink.validator(trials=100)
+                pink.validator(trials=1)
 
         else:
             print('Options:')
