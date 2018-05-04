@@ -1150,7 +1150,7 @@ class Pink(Base):
         else:
             plt.savefig(save)
 
-    def _label_plot(self, book, shape, save=None, xtick_rotation=None, color_map='gnuplot2'):
+    def _label_plot(self, book, shape, save=None, xtick_rotation=None, color_map='gnuplot2', title=None):
         '''Isolated function to plot the attribute histogram if the data is labelled in 
         nature
 
@@ -1166,6 +1166,8 @@ class Pink(Base):
             Will rotate the xlabel by rotation
         color_map - str
             The name of the matplotlib.colormap that will be passed directly to matplotlib.pyplot.get_map()
+        title - None of str
+            A simple title strng passed to fig.suptitle()
         '''
         save = self._path_build(save)
 
@@ -1227,6 +1229,9 @@ class Pink(Base):
         cb1 = mpl.colorbar.ColorbarBase(cax, cmap=cmap, norm=norm)
         cb1.set_label('Fraction Contributed per Neuron')
 
+        if title is not None:
+            fig.suptitle(title)
+
         # fig.tight_layout()
         if save is None:
             plt.show()
@@ -1286,26 +1291,39 @@ class Pink(Base):
         items = binary.get_data(label=label, func=func)
 
         book = defaultdict(list)
-
-        DISTANCE = False if trials > 1 else True
-        
-        pixels = range(np.prod(shape))
-        for _ in range(trials):
+        if trials == 1:
             for heat, item in zip(binary.src_heatmap, items):
-                if DISTANCE:
-                    loc = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
-                else:
-                    prob = 1. / heat
-                    prob = prob / prob.sum()
-                    rand_pos = np.random.choice(pixels, p=prob.flatten())
-                    x = rand_pos // heat.shape[0]
-                    y = rand_pos % heat.shape[1]
-                    loc = (x,y)
-                
+                loc = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
                 book[loc].append(item)
+        else:
+            print('Starting trials')
+            pixels = range(np.prod(shape))
+            for heat, item in zip(binary.src_heatmap, items):
+                loc_d = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
+                counter = defaultdict(int)
+                
+                prob = 1. / heat**10.
+                prob = prob / prob.sum()
+                rand_pos = np.random.choice(pixels, size=trials, p=prob.flatten())
+                xd = rand_pos // heat.shape[0]
+                yd = rand_pos % heat.shape[1]            
+                locs = [(x,y) for x,y in zip(xd, yd)]
+                for loc in locs:
+                    book[loc].append(item)
+                    counter[loc] += 1
+                # print(counter, loc_d, counter[loc_d])
+
+                # fig, ax = plt.subplots(1,2)
+                # ax[0].imshow(heat)
+                # ax[1].imshow(prob)
+                # plt.show()
 
         if plot:
-            self.attribute_plot(book, shape, **kwargs)
+            if trials == 1:
+                title = 'No trials'
+            else:
+                title = f'{trials} Trials Performed'
+            self.attribute_plot(book, shape, title=title, **kwargs)
 
         return book
 
@@ -1451,6 +1469,7 @@ if __name__ == '__main__':
                   ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Large/TEST8.pink', 'plots'),
                   ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex/TEST6.pink', 'plots'),
                   ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex_Large/TEST8.pink', 'plots')]
+    COLLECTION = [('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex_Large/TEST8.pink', 'plots')]
 
     for i in sys.argv[1:]:
    
@@ -1757,26 +1776,26 @@ if __name__ == '__main__':
                     print(f'Loading {pink_file}\n')
                     pink = Pink.loader(pink_file)
 
-                    pink.show_som(channel=0)
-                    pink.show_som(channel=0, mode='split')
-                    pink.show_som(channel=1)
-                    pink.show_som(channel=1, mode='split')
-                    pink.show_som(channel=1, mode='grid')
+                    # pink.show_som(channel=0)
+                    # pink.show_som(channel=0, mode='split')
+                    # pink.show_som(channel=1)
+                    # pink.show_som(channel=1, mode='split')
+                    # pink.show_som(channel=1, mode='grid')
 
-                    def reduce1(s):
-                        # If there is only one object, its returned as dict. Test and list it if needed            
-                        a = s.rgz_annotations()
-                        if a is None:
-                            return ''
-                        else:
-                            a = a['object']
-                            if not isinstance(a, list):
-                                a = [a]
-                            return str(len(a))  
-                    pink.attribute_heatmap(func=reduce1, save=f'train_number_counts.pdf',
-                                          color_map='Blues', mode='train')
-                    pink.attribute_heatmap(func=reduce1, save=f'valid_number_counts.pdf',
-                                          color_map='Blues', mode='validate')
+                    # def reduce1(s):
+                    #     # If there is only one object, its returned as dict. Test and list it if needed            
+                    #     a = s.rgz_annotations()
+                    #     if a is None:
+                    #         return ''
+                    #     else:
+                    #         a = a['object']
+                    #         if not isinstance(a, list):
+                    #             a = [a]
+                    #         return str(len(a))  
+                    # pink.attribute_heatmap(func=reduce1, save=f'train_number_counts.pdf',
+                    #                       color_map='Blues', mode='train')
+                    # pink.attribute_heatmap(func=reduce1, save=f'valid_number_counts.pdf',
+                    #                       color_map='Blues', mode='validate')
 
                     def reduce2(s):
                         # If there is only one object, its returned as dict. Test and list it if needed
@@ -1793,11 +1812,11 @@ if __name__ == '__main__':
                     pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'valid_label_counts.pdf',
                                           color_map='Blues', mode='validate')
                     pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'train_trials_label_counts.pdf',
-                                          color_map='Blues', mode='train', trials=100)
+                                          color_map='Blues', mode='train', trials=10000)
                     pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'valid_trials_label_counts.pdf',
-                                          color_map='Blues', mode='validate', trials=200)
+                                          color_map='Blues', mode='validate', trials=10000)
 
-                    def reduce3(s):
+                    def reduce2(s):
                         # If there is only one object, its returned as dict. Test and list it if needed
                         a = s.rgz_annotations()
                         if a is None:
@@ -1807,28 +1826,17 @@ if __name__ == '__main__':
                             if not isinstance(a, list):
                                 a = [a]
                             return [ i['name'].split('_')[0] for i in a ]
-                    pink.attribute_heatmap(func=reduce3, xtick_rotation=90, save=f'train_label_comp_counts.pdf',
+                    pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'train_label_comp_counts.pdf',
                                           color_map='Blues', mode='train')
-                    pink.attribute_heatmap(func=reduce3, xtick_rotation=90, save=f'valid_label_comp_counts.pdf',
+                    pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'valid_label_comp_counts.pdf',
                                           color_map='Blues', mode='validate')
+                    pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'train_trials_label_comp_counts.pdf',
+                                          color_map='Blues', mode='train', trials=10000)
+                    pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'valid_trials_label_comp_counts.pdf',
+                                          color_map='Blues', mode='validate', trials=10000)
 
-                    def reduce4(s):
-                        # If there is only one object, its returned as dict. Test and list it if needed
-                        a = s.rgz_annotations()
-                        if a is None:
-                            return ''
-                        else:
-                            a = a['object']
-                            if not isinstance(a, list):
-                                a = [a]
-                            return [ i['name'].split('_')[1] for i in a ]
-                    pink.attribute_heatmap(func=reduce4, xtick_rotation=90, save=f'train_label_peak_counts.pdf',
-                                          color_map='Blues', mode='train')
-                    pink.attribute_heatmap(func=reduce4, xtick_rotation=90, save=f'valid_label_peak_counts.pdf',
-                                          color_map='Blues', mode='validate')
-
-                    pink.count_map(plot=True, save=f'train_count_map.pdf', mode='train')
-                    pink.count_map(plot=True, save=f'valid_count_map.pdf', mode='validate')
+                    # pink.count_map(plot=True, save=f'train_count_map.pdf', mode='train')
+                    # pink.count_map(plot=True, save=f'valid_count_map.pdf', mode='validate')
 
                     plt.close('all')
 
