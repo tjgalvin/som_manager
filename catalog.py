@@ -514,6 +514,13 @@ class Binary(Base):
         self.heat_hash = ''
         self.src_heatmap = None
 
+    @property
+    def preprocessor_args(self):
+        '''Reterive the pre-processor arguments of this Binary file
+        '''
+        return {'norm': self.norm, 'log':self.log10, 'sigma':self.sigma,
+                'convex':self.convex}
+
     def get_image(self, index, channel=0):
         '''Return the index-th image that was dumped to the binary image file that
         is managed by this instance of Binary
@@ -1260,11 +1267,11 @@ class Pink(Base):
         except:
             self._label_plot(book, shape, **kwargs)
             
-    def attribute_heatmap(self, trials=1, mode='train', label=None, plot=True, func=None, *args, **kwargs):
+    def attribute_heatmap(self, realisations=1, mode='train', label=None, plot=True, func=None, *args, **kwargs):
         '''Based on the most likely grid/best match in the heatmap for each source
         build up a distibution plot of each some label/parameters
 
-        trials - int
+        realisations - int
              The number of times to use the heatmap to select a position to put something
         mode - `train` or `validate`
              Specify which of the attached Binary instances we should map and process.
@@ -1291,12 +1298,12 @@ class Pink(Base):
         items = binary.get_data(label=label, func=func)
 
         book = defaultdict(list)
-        if trials == 1:
+        if realisations == 1:
             for heat, item in zip(binary.src_heatmap, items):
                 loc = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
                 book[loc].append(item)
         else:
-            print('Starting trials')
+            # print('Starting realisations')
             pixels = range(np.prod(shape))
             for heat, item in zip(binary.src_heatmap, items):
                 loc_d = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
@@ -1304,7 +1311,7 @@ class Pink(Base):
                 
                 prob = 1. / heat**10.
                 prob = prob / prob.sum()
-                rand_pos = np.random.choice(pixels, size=trials, p=prob.flatten())
+                rand_pos = np.random.choice(pixels, size=realisations, p=prob.flatten())
                 xd = rand_pos // heat.shape[0]
                 yd = rand_pos % heat.shape[1]            
                 locs = [(x,y) for x,y in zip(xd, yd)]
@@ -1319,10 +1326,10 @@ class Pink(Base):
                 # plt.show()
 
         if plot:
-            if trials == 1:
-                title = 'No trials'
+            if realisations == 1:
+                title = 'No realisations'
             else:
-                title = f'{trials} Trials Performed'
+                title = f'{realisations} realisations Performed'
             self.attribute_plot(book, shape, title=title, **kwargs)
 
         return book
@@ -1407,13 +1414,33 @@ class Pink(Base):
 
         return book
 
-    def validator(self, trials=1):
+    def _source_rgz(self, s):
+        '''Default function used to process source labels. 
+
+        s - Source object instance
+        '''
+        # If there is only one object, its returned as dict. Test and list it if needed
+        a = s.rgz_annotations()
+        if a is None:
+            return ''
+        else:
+            a = a['object']
+            if not isinstance(a, list):
+                a = [a]
+            return [ i['name'] for i in a ]
+
+    def validator(self, realisations=1, func=None, pack=True):
         '''The code to check the validate data agaisnt the training data. Use the distribution
         of labels from some neuron from the training data to predict the label of the source
         from the validate set
 
-        trials - int
+        realisations - int
              The number of times to use the heatmap to select a position to put something
+        func - None or Function
+             The function used to process the labels. If None, use a default method
+        pack - bool
+             Back the answer dict object with the number of realisations, the preprocessor arguments
+             and the Pink specific arguments
         '''
         from collections import Counter
 
@@ -1422,38 +1449,52 @@ class Pink(Base):
         valid = self.validate_binary
 
         # Get the `book` object from the training data with label types
-        def source_rgz(s):
-            # If there is only one object, its returned as dict. Test and list it if needed
-            a = s.rgz_annotations()
-            if a is None:
-                return ''
-            else:
-                a = a['object']
-                if not isinstance(a, list):
-                    a = [a]
-                return [ i['name'] for i in a ]
+        if func is None:
+            func = self._source_rgz
 
-        book = self.attribute_heatmap(func=source_rgz, trials=trials, plot=False)
+        book = self.attribute_heatmap(func=func, realisations=realisations, plot=False)
+        answer_book = defaultdict( lambda : {'correct':0,'wrong':0, 'accuracy':0} )
 
-        correct = 0
-        wrong   = 0
+        # For speed, loop through the entire `book` object once now and flatten the items
+        for key in book:
+            v = [i for items in book[key] for i in items]
+            book[key] = v
 
         for src, heat in zip(valid.sources, valid.src_heatmap):
             loc = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
 
-            v = [i for items in book[loc] for i in items]
+            # Build up the distribution of answers here
+            # v = [i for items in book[loc] for i in items]
+            v = book[loc]
             c = Counter(v)
             arr = np.array([i for i in c.values()])
             items = [i for i in c.keys()]
+
+            # Given the distribution of answers for that Neuron, make the guess.
             guess = items[np.argmax(arr)]
+            
+            # Using the distribution as a method of selecting generally does pretty poorly...
             # guess = np.random.choice(items, p=arr / np.sum(arr))
 
-            if guess in [i for i in source_rgz(src)]:
-                correct += 1
+            if guess in [i for i in func(src)]:
+                answer_book[guess]['correct'] += 1
+                answer_book['total']['correct'] += 1
             else:
-                wrong   += 1
+                answer_book[guess]['wrong'] += 1
+                answer_book['total']['wrong'] += 1
+            answer_book[guess]['accuracy'] = answer_book[guess]['correct'] / (answer_book[guess]['correct']+answer_book[guess]['wrong'] )
+            answer_book['total']['accuracy'] = answer_book['total']['correct'] / (answer_book['total']['correct']+answer_book['total']['wrong'] )
+                
+        # Flatten out the dict of dicts into a single dict
+        flattened_book = {f'{k}_{k2}': v2 for k, v in answer_book.items() for k2, v2 in v.items()}
 
-        print(correct, wrong, correct / (correct+wrong))
+        if pack:
+            flattened_book['realisations'] = realisations
+            flattened_book['experiment'] = self.project_dir
+            flattened_book.update(train.preprocessor_args)
+            flattened_book.update(self.pink_args)
+
+        return flattened_book
 
 if __name__ == '__main__':
 
@@ -1469,7 +1510,7 @@ if __name__ == '__main__':
                   ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Large/TEST8.pink', 'plots'),
                   ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex/TEST6.pink', 'plots'),
                   ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex_Large/TEST8.pink', 'plots')]
-    COLLECTION = [('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex_Large/TEST8.pink', 'plots')]
+    # COLLECTION = [('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex_Large/TEST8.pink', 'plots')]
 
     for i in sys.argv[1:]:
    
@@ -1523,8 +1564,8 @@ if __name__ == '__main__':
             print(validate_bin)
             
             pink = Pink(train_bin, pink_args={'som-width':7,
-                                            'som-height':7,
-                                            'num-iter':NUM_ITER},
+                                              'som-height':7,
+                                              'num-iter':NUM_ITER},
                         validate_binary=validate_bin) 
 
             pink.train()    
@@ -1811,10 +1852,10 @@ if __name__ == '__main__':
                                           color_map='Blues', mode='train')
                     pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'valid_label_counts.pdf',
                                           color_map='Blues', mode='validate')
-                    pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'train_trials_label_counts.pdf',
-                                          color_map='Blues', mode='train', trials=10000)
-                    pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'valid_trials_label_counts.pdf',
-                                          color_map='Blues', mode='validate', trials=10000)
+                    pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'train_realisations_label_counts.pdf',
+                                          color_map='Blues', mode='train', realisations=10000)
+                    pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'valid_realisations_label_counts.pdf',
+                                          color_map='Blues', mode='validate', realisations=10000)
 
                     def reduce2(s):
                         # If there is only one object, its returned as dict. Test and list it if needed
@@ -1830,10 +1871,10 @@ if __name__ == '__main__':
                                           color_map='Blues', mode='train')
                     pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'valid_label_comp_counts.pdf',
                                           color_map='Blues', mode='validate')
-                    pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'train_trials_label_comp_counts.pdf',
-                                          color_map='Blues', mode='train', trials=10000)
-                    pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'valid_trials_label_comp_counts.pdf',
-                                          color_map='Blues', mode='validate', trials=10000)
+                    pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'train_realisations_label_comp_counts.pdf',
+                                          color_map='Blues', mode='train', realisations=10000)
+                    pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'valid_realisations_label_comp_counts.pdf',
+                                          color_map='Blues', mode='validate', realisations=10000)
 
                     # pink.count_map(plot=True, save=f'train_count_map.pdf', mode='train')
                     # pink.count_map(plot=True, save=f'valid_count_map.pdf', mode='validate')
@@ -1844,12 +1885,24 @@ if __name__ == '__main__':
                     #     pink.heatmap(plot=True, image_number=i, apply=False, save=f'{i}_heatmap.pdf')
 
         elif '-v' == i:
+            import pandas 
+
+            results = []
             for pink_file, out_name in COLLECTION:
                 print(pink_file)
                 pink = Pink.loader(pink_file)
-                # pink.validator(trials=500)
-                pink.validator(trials=100)
-                pink.validator(trials=1)
+                
+                answer = pink.validator(realisations=100)
+                results.append(answer)
+                answer = pink.validator(realisations=1)
+                results.append(answer)
+
+            df = pandas.DataFrame(results)
+            print(df)
+            print('Saving results...')
+            df.to_json('Validator_Results.json')
+            df.to_csv('Validator_Results.csv')
+            df.to_pickle('Validator_Results.pkl')
 
         else:
             print('Options:')
