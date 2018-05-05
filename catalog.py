@@ -1499,7 +1499,7 @@ class Pink(Base):
 if __name__ == '__main__':
 
     FRACTION = 0.5
-    PROJECTS_DIR = 'Experiments_2'
+    PROJECTS_DIR = 'Experiments'
     NUM_ITER = 10
     COLLECTION = [('Experiments/FIRST_Norm_Log_3/TEST1.pink', 'plots'),
                   ('Experiments/FIRST_Norm_NoLog_NoSig/TEST2.pink', 'plots'),
@@ -1527,268 +1527,293 @@ if __name__ == '__main__':
 
             # # ------------------
 
-            bins      = cat.dump_binary('TEST_chan.binary', norm=True, sigma=[3., False], log10=[True,False], 
-                                        channels=['FIRST'],
-                                        # channels=['FIRST','WISE_W1'],
-                                        project_dir=f'{PROJECTS_DIR}/FIRST_Norm_Log_3',
-                                        fraction=FRACTION)
+            # bins      = cat.dump_binary('TEST_chan.binary', norm=True, sigma=[3., False], log10=[True,False], 
+            #                             channels=['FIRST'],
+            #                             # channels=['FIRST','WISE_W1'],
+            #                             project_dir=f'{PROJECTS_DIR}/FIRST_Norm_Log_3',
+            #                             fraction=FRACTION)
 
-            # train_bin = bins
-            train_bin, validate_bin = bins
-            print(train_bin)
-            print(validate_bin)
-            # validate_bin=None
+            # # train_bin = bins
+            # train_bin, validate_bin = bins
+            # print(train_bin)
+            # print(validate_bin)
+            # # validate_bin=None
 
-            pink = Pink(train_bin, 
-                        pink_args={'som-width':7,
-                                   'som-height':7,
-                                   'num-iter':NUM_ITER},
-                        validate_binary=validate_bin) 
+            # pink = Pink(train_bin, 
+            #             pink_args={'som-width':7,
+            #                        'som-height':7,
+            #                        'num-iter':NUM_ITER},
+            #             validate_binary=validate_bin) 
 
-            pink.train()        
+            # pink.train()        
 
-            pink.map(mode='train', apply=True)
-            pink.map(mode='validate', apply=True)
+            # pink.map(mode='train', apply=True)
+            # pink.map(mode='validate', apply=True)
 
-            pink.save('TEST1.pink')
+            # pink.save('TEST1.pink')
 
-            # ------------------
+            # # ------------------
 
-            bins = cat.dump_binary('TEST_chan.binary', norm=True, sigma=[3., False], log10=[True,False], 
-                                        channels=['FIRST'],
-                                        project_dir=f'{PROJECTS_DIR}/FIRST_Norm_Log_3',
-                                        fraction=FRACTION)
+            # bins = cat.dump_binary('TEST_chan.binary', norm=True, sigma=[3., False], log10=[True,False], 
+            #                             channels=['FIRST'],
+            #                             project_dir=f'{PROJECTS_DIR}/FIRST_Norm_Log_3',
+            #                             fraction=FRACTION)
 
-            train_bin, validate_bin = bins
-            print(train_bin)
-            print(validate_bin)
+            # train_bin, validate_bin = bins
+            # print(train_bin)
+            # print(validate_bin)
             
-            pink = Pink(train_bin, pink_args={'som-width':7,
-                                              'som-height':7,
-                                              'num-iter':NUM_ITER},
-                        validate_binary=validate_bin) 
+            # pink = Pink(train_bin, pink_args={'som-width':7,
+            #                                   'som-height':7,
+            #                                   'num-iter':NUM_ITER},
+            #             validate_binary=validate_bin) 
 
-            pink.train()    
+            # pink.train()    
             
-            pink.map(mode='train', apply=True)
-            pink.map(mode='validate', apply=True)
+            # pink.map(mode='train', apply=True)
+            # pink.map(mode='validate', apply=True)
 
-            pink.save('TEST1.pink')
+            # pink.save('TEST1.pink')
 
             
-            # ------------------
+            # # ------------------
 
-            bins = cat.dump_binary('TEST.binary', norm=True, sigma=False, log10=False, 
-                                    project_dir=f'{PROJECTS_DIR}/FIRST_Norm_NoLog_NoSig',
-                                        fraction=FRACTION)
+            # bins = cat.dump_binary('TEST.binary', norm=True, sigma=False, log10=False, 
+            #                         project_dir=f'{PROJECTS_DIR}/FIRST_Norm_NoLog_NoSig',
+            #                             fraction=FRACTION)
 
-            train_bin, validate_bin = bins
-            print(train_bin)
-            print(validate_bin)
+            # train_bin, validate_bin = bins
+            # print(train_bin)
+            # print(validate_bin)
 
-            pink = Pink(train_bin, pink_args={'som-width':7,
-                                            'som-height':7,
-                                            'num-iter':NUM_ITER},
-                        validate_binary=validate_bin) 
+            # pink = Pink(train_bin, pink_args={'som-width':7,
+            #                                 'som-height':7,
+            #                                 'num-iter':NUM_ITER},
+            #             validate_binary=validate_bin) 
 
-            pink.train()
+            # pink.train()
 
-            pink.map(mode='train', apply=True)
-            pink.map(mode='validate', apply=True)
+            # pink.map(mode='train', apply=True)
+            # pink.map(mode='validate', apply=True)
 
-            pink.save('TEST2.pink')
+            # pink.save('TEST2.pink')
 
-            # ------------------
+            # # ------------------
 
-            bins = cat.dump_binary('TEST_chan.binary', norm=False, log10=True, sigma=False,
-                                        channels=['FIRST'],
-                                        project_dir=f'{PROJECTS_DIR}/FIRST_NoNorm_Log_NoSig',
-                                        fraction=FRACTION)
+            # bins = cat.dump_binary('TEST_chan.binary', norm=False, log10=True, sigma=False,
+            #                             channels=['FIRST'],
+            #                             project_dir=f'{PROJECTS_DIR}/FIRST_NoNorm_Log_NoSig',
+            #                             fraction=FRACTION)
 
-            train_bin, validate_bin = bins
-            print(train_bin)
-            print(validate_bin)
+            # train_bin, validate_bin = bins
+            # print(train_bin)
+            # print(validate_bin)
 
-            pink = Pink(train_bin, pink_args={'som-width':7,
-                                            'som-height':7,
-                                            'num-iter':NUM_ITER},
-                        validate_binary=validate_bin) 
+            # pink = Pink(train_bin, pink_args={'som-width':7,
+            #                                 'som-height':7,
+            #                                 'num-iter':NUM_ITER},
+            #             validate_binary=validate_bin) 
 
-            pink.train()
+            # pink.train()
             
-            pink.map(mode='train', apply=True)
-            pink.map(mode='validate', apply=True)
+            # pink.map(mode='train', apply=True)
+            # pink.map(mode='validate', apply=True)
 
-            pink.save('TEST3.pink')
+            # pink.save('TEST3.pink')
 
-            # ------------------
+            # # ------------------
 
-            bins = cat.dump_binary('TEST_chan_3.binary', norm=False, sigma=False, log10=False,
-                                        channels=['FIRST'],
-                                        project_dir=f'{PROJECTS_DIR}/FIRST_NoNorm_NoLog_NoSig',
-                                        fraction=FRACTION)
+            # bins = cat.dump_binary('TEST_chan_3.binary', norm=False, sigma=False, log10=False,
+            #                             channels=['FIRST'],
+            #                             project_dir=f'{PROJECTS_DIR}/FIRST_NoNorm_NoLog_NoSig',
+            #                             fraction=FRACTION)
 
-            train_bin, validate_bin = bins
-            print(train_bin)
-            print(validate_bin)
+            # train_bin, validate_bin = bins
+            # print(train_bin)
+            # print(validate_bin)
 
-            pink = Pink(train_bin, pink_args={'som-width':7,
-                                            'som-height':7,
-                                            'num-iter':NUM_ITER},
-                        validate_binary=validate_bin) 
+            # pink = Pink(train_bin, pink_args={'som-width':7,
+            #                                 'som-height':7,
+            #                                 'num-iter':NUM_ITER},
+            #             validate_binary=validate_bin) 
 
-            pink.train()
+            # pink.train()
             
-            pink.map(mode='train', apply=True)
-            pink.map(mode='validate', apply=True)
+            # pink.map(mode='train', apply=True)
+            # pink.map(mode='validate', apply=True)
 
-            pink.save('TEST4.pink')
+            # pink.save('TEST4.pink')
 
-            # ------------------
+            # # ------------------
 
-            bins = cat.dump_binary('TEST_chan_3.binary', norm=False, sigma=3., log10=False,
-                                        channels=['FIRST'],
-                                        project_dir=f'{PROJECTS_DIR}/FIRST_NoNorm_NoLog_3',
-                                        fraction=FRACTION)
+            # bins = cat.dump_binary('TEST_chan_3.binary', norm=False, sigma=3., log10=False,
+            #                             channels=['FIRST'],
+            #                             project_dir=f'{PROJECTS_DIR}/FIRST_NoNorm_NoLog_3',
+            #                             fraction=FRACTION)
 
-            train_bin, validate_bin = bins
-            print(train_bin)
-            print(validate_bin)
+            # train_bin, validate_bin = bins
+            # print(train_bin)
+            # print(validate_bin)
 
-            pink = Pink(train_bin, pink_args={'som-width':7,
-                                            'som-height':7,
-                                            'num-iter':NUM_ITER},
-                        validate_binary=validate_bin) 
+            # pink = Pink(train_bin, pink_args={'som-width':7,
+            #                                 'som-height':7,
+            #                                 'num-iter':NUM_ITER},
+            #             validate_binary=validate_bin) 
 
-            pink.train()
+            # pink.train()
             
-            pink.map(mode='train', apply=True)
-            pink.map(mode='validate', apply=True)
+            # pink.map(mode='train', apply=True)
+            # pink.map(mode='validate', apply=True)
 
-            pink.save('TEST5.pink')
+            # pink.save('TEST5.pink')
 
-            # ------------------
+            # # ------------------
 
-            bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=3., log10=[True, False],
-                                        channels=['FIRST','WISE_W1'],
-                                        project_dir=f'{PROJECTS_DIR}/FIRST_WISE_Norm_Log_3',
-                                        fraction=FRACTION)
+            # bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=3., log10=[True, False],
+            #                             channels=['FIRST','WISE_W1'],
+            #                             project_dir=f'{PROJECTS_DIR}/FIRST_WISE_Norm_Log_3',
+            #                             fraction=FRACTION)
 
-            train_bin, validate_bin = bins
-            print(train_bin)
-            print(validate_bin)
+            # train_bin, validate_bin = bins
+            # print(train_bin)
+            # print(validate_bin)
 
-            pink = Pink(train_bin, pink_args={'som-width':7,
-                                            'som-height':7,
-                                            'num-iter':NUM_ITER},
-                        validate_binary=validate_bin) 
+            # pink = Pink(train_bin, pink_args={'som-width':7,
+            #                                 'som-height':7,
+            #                                 'num-iter':NUM_ITER},
+            #             validate_binary=validate_bin) 
 
-            pink.train()
+            # pink.train()
             
-            pink.map(mode='train', apply=True)
-            pink.map(mode='validate', apply=True)
+            # pink.map(mode='train', apply=True)
+            # pink.map(mode='validate', apply=True)
 
-            pink.save('TEST5.pink')
+            # pink.save('TEST5.pink')
 
-            # ------------------
+            # # ------------------
 
-            bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], log10=[True, False],
-                                        channels=['FIRST','WISE_W1'],
-                                        project_dir=f'{PROJECTS_DIR}/FIRST_WISE_Norm_Log_3_NoSigWise',
-                                        fraction=FRACTION)
+            # bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], log10=[True, False],
+            #                             channels=['FIRST','WISE_W1'],
+            #                             project_dir=f'{PROJECTS_DIR}/FIRST_WISE_Norm_Log_3_NoSigWise',
+            #                             fraction=FRACTION)
 
-            train_bin, validate_bin = bins
-            print(train_bin)
-            print(validate_bin)
+            # train_bin, validate_bin = bins
+            # print(train_bin)
+            # print(validate_bin)
 
-            pink = Pink(train_bin, pink_args={'som-width':7,
-                                            'som-height':7,
-                                            'num-iter':NUM_ITER},
-                        validate_binary=validate_bin) 
+            # pink = Pink(train_bin, pink_args={'som-width':7,
+            #                                 'som-height':7,
+            #                                 'num-iter':NUM_ITER},
+            #             validate_binary=validate_bin) 
 
-            pink.train()
+            # pink.train()
             
-            pink.map(mode='train', apply=True)
-            pink.map(mode='validate', apply=True)
+            # pink.map(mode='train', apply=True)
+            # pink.map(mode='validate', apply=True)
 
-            pink.save('TEST6.pink')
+            # pink.save('TEST6.pink')
 
-            # ------------------
+            # # ------------------
 
-            bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=3., log10=[True, False],
-                                        channels=['FIRST','WISE_W1'],
-                                        project_dir=f'{PROJECTS_DIR}/FIRST_WISE_Norm_Log_3_Large',
-                                        fraction=FRACTION)
+            # bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=3., log10=[True, False],
+            #                             channels=['FIRST','WISE_W1'],
+            #                             project_dir=f'{PROJECTS_DIR}/FIRST_WISE_Norm_Log_3_Large',
+            #                             fraction=FRACTION)
 
 
-            train_bin, validate_bin = bins
-            print(train_bin)
-            print(validate_bin)
+            # train_bin, validate_bin = bins
+            # print(train_bin)
+            # print(validate_bin)
 
-            pink = Pink(train_bin, pink_args={'som-width':10,
-                                            'som-height':10,
-                                            'num-iter':NUM_ITER},
-                        validate_binary=validate_bin) 
+            # pink = Pink(train_bin, pink_args={'som-width':10,
+            #                                 'som-height':10,
+            #                                 'num-iter':NUM_ITER},
+            #             validate_binary=validate_bin) 
 
-            pink.train()
+            # pink.train()
             
-            pink.map(mode='train', apply=True)
-            pink.map(mode='validate', apply=True)
+            # pink.map(mode='train', apply=True)
+            # pink.map(mode='validate', apply=True)
 
-            pink.save('TEST7.pink')
+            # pink.save('TEST7.pink')
 
-            # ------------------
+            # # ------------------
 
-            bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], log10=[True, False],
-                                        channels=['FIRST','WISE_W1'],
-                                        project_dir=f'{PROJECTS_DIR}/FIRST_WISE_Norm_Log_3_NoSigWise_Large',
-                                        fraction=FRACTION)
+            # bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], log10=[True, False],
+            #                             channels=['FIRST','WISE_W1'],
+            #                             project_dir=f'{PROJECTS_DIR}/FIRST_WISE_Norm_Log_3_NoSigWise_Large',
+            #                             fraction=FRACTION)
 
-            train_bin, validate_bin = bins
-            print(train_bin)
-            print(validate_bin)
+            # train_bin, validate_bin = bins
+            # print(train_bin)
+            # print(validate_bin)
 
-            pink = Pink(train_bin, pink_args={'som-width':10,
-                                            'som-height':10,
-                                            'num-iter':NUM_ITER},
-                        validate_binary=validate_bin) 
+            # pink = Pink(train_bin, pink_args={'som-width':10,
+            #                                 'som-height':10,
+            #                                 'num-iter':NUM_ITER},
+            #             validate_binary=validate_bin) 
 
-            pink.train()
+            # pink.train()
             
-            pink.map(mode='train', apply=True)
-            pink.map(mode='validate', apply=True)
+            # pink.map(mode='train', apply=True)
+            # pink.map(mode='validate', apply=True)
 
-            pink.save('TEST8.pink')
+            # pink.save('TEST8.pink')
 
-            # ------------------
+            # # ------------------
 
-            bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], log10=[True, False],
-                                        channels=['FIRST','WISE_W1'], convex=True,
-                                        project_dir=f'{PROJECTS_DIR}/FIRST_WISE_Norm_Log_3_NoSigWise_Convex',
-                                        fraction=FRACTION)
+            # bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], log10=[True, False],
+            #                             channels=['FIRST','WISE_W1'], convex=True,
+            #                             project_dir=f'{PROJECTS_DIR}/FIRST_WISE_Norm_Log_3_NoSigWise_Convex',
+            #                             fraction=FRACTION)
 
-            train_bin, validate_bin = bins
-            print(train_bin)
-            print(validate_bin)
+            # train_bin, validate_bin = bins
+            # print(train_bin)
+            # print(validate_bin)
 
-            pink = Pink(train_bin, pink_args={'som-width':7,
-                                            'som-height':7,
-                                            'num-iter':NUM_ITER},
-                        validate_binary=validate_bin) 
+            # pink = Pink(train_bin, pink_args={'som-width':7,
+            #                                 'som-height':7,
+            #                                 'num-iter':NUM_ITER},
+            #             validate_binary=validate_bin) 
 
-            pink.train() 
+            # pink.train() 
             
-            pink.map(mode='train', apply=True)
-            pink.map(mode='validate', apply=True)
+            # pink.map(mode='train', apply=True)
+            # pink.map(mode='validate', apply=True)
 
-            pink.save('TEST6.pink')
+            # pink.save('TEST6.pink')
+
+            # # ------------------
+
+            # bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], 
+            #                             log10=[True, False], convex=True,
+            #                             channels=['FIRST','WISE_W1'],
+            #                             project_dir=f'{PROJECTS_DIR}/FIRST_WISE_Norm_Log_3_NoSigWise_Convex_Large',
+            #                             fraction=FRACTION)
+
+
+            # train_bin, validate_bin = bins
+            # print(train_bin)
+            # print(validate_bin)
+
+            # pink = Pink(train_bin, pink_args={'som-width':10,
+            #                                 'som-height':10,
+            #                                 'num-iter':NUM_ITER},
+            #             validate_binary=validate_bin) 
+
+            # pink.train()
+            
+            # pink.map(mode='train', apply=True)
+            # pink.map(mode='validate', apply=True)
+
+            # pink.save('TEST8.pink')
 
             # ------------------
 
             bins = cat.dump_binary('TEST_chan_3.binary', norm=True, sigma=[3., False], 
                                         log10=[True, False], convex=True,
                                         channels=['FIRST','WISE_W1'],
-                                        project_dir=f'{PROJECTS_DIR}/FIRST_WISE_Norm_Log_3_NoSigWise_Convex_Large',
+                                        project_dir=f'{PROJECTS_DIR}/FIRST_WISE_Norm_Log_3_NoSigWise_Convex_VeryLarge',
                                         fraction=FRACTION)
 
 
@@ -1796,8 +1821,8 @@ if __name__ == '__main__':
             print(train_bin)
             print(validate_bin)
 
-            pink = Pink(train_bin, pink_args={'som-width':10,
-                                            'som-height':10,
+            pink = Pink(train_bin, pink_args={'som-width':20,
+                                            'som-height':20,
                                             'num-iter':NUM_ITER},
                         validate_binary=validate_bin) 
 
