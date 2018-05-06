@@ -11,6 +11,7 @@ import pickle
 import struct
 import random
 import subprocess
+import pandas as pd
 import xmltodict as xd
 import hashlib
 import numpy as np
@@ -515,7 +516,7 @@ class Binary(Base):
 
         self.heat_path = f'{self.binary_path}.heat'
         self.heat_hash = ''
-        self.src_heatmap = None
+        self.src_heatmap = {}
 
         self.SOM_path = f'{self.binary_path}.Trained_SOM'
         self.SOM_hash = ''
@@ -908,9 +909,9 @@ class Pink(Base):
         when the segments option is used. It should be fairly transparent to the calling 
         function. 
         '''
-        results = []
         for count, train in enumerate(self.binary):
             self._train(binary=train)
+            train.trained = True
 
         self.trained = True
 
@@ -925,13 +926,17 @@ class Pink(Base):
              The trained binary from which to pull the SOM from. This is important
              if cross validation has been used
         '''
-        if not self.trained:
+        binary = self._reterive_binary(count)
+        
+        if not binary.trained:
+            # print(f'{binary.binary_path} not trained... Returning...')
             return None
         
-        if get_hash(self.SOM_path[count]) != self.SOM_hash[count]:
+        if get_hash(binary.SOM_path) != binary.SOM_hash:
+            # print(f'{binary.SOM_path} hash not matching... Returning...')
             return None
 
-        with open(self.SOM_path[count], 'rb') as som:
+        with open(binary.SOM_path, 'rb') as som:
             # Unpack the header information
             numberOfChannels, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height = struct.unpack('i' * 6, som.read(4*6))
             SOM_size = np.prod([SOM_width, SOM_height, SOM_depth])
@@ -939,6 +944,7 @@ class Pink(Base):
             # Check to ensure that the request channel exists. Remeber we are comparing
             # the index
             if channel > numberOfChannels - 1:
+                # print(f'Channel {channel} larger than {numberOfChannels}... Returning...')
                 return None
 
             dataSize = numberOfChannels * SOM_size * neuron_width * neuron_height
@@ -958,14 +964,16 @@ class Pink(Base):
             else:
                 data = data[:,channel,:]
 
-            return (data, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height)
+            return (binary, data, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height)
 
-    def show_som(self, channel=0, mode='raw', color_map='bwr'):
+    def show_som(self, mode='train', channel=0, plt_mode='raw', color_map='bwr'):
         '''Method to plot the trained SOM, and associated plotting options
 
+        mode - str or int
+             Type passed through to _reterive_binary()
         channel - int
              The channel from the SOM to plot. Defaults to the first (zero-index) channel
-        mode - str
+        plt_mode - str
              Mode to print the SOM on. 
              `split` - Slice the neurons into their own subplot axes objects from the returned data
                        matrix from self.retrieve_som_data(). 
@@ -976,12 +984,13 @@ class Pink(Base):
         '''
         import matplotlib as mpl
 
-        params = self.retrieve_som_data(channel=channel)
+        params = self.retrieve_som_data(channel=channel, count=mode)
         if params is None:
+            # print('Params is None... Returning...')
             return
-        (data, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height) = params
+        (binary, data, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height) = params
 
-        if mode == 'split':
+        if plt_mode == 'split':
             fig, ax = plt.subplots(SOM_width, SOM_height, figsize=(16,16), 
                                 gridspec_kw={'hspace':0.001,'wspace':0.001,
                                             'left':0.001, 'right':0.999,
@@ -995,35 +1004,35 @@ class Pink(Base):
                     ax[x,y].get_xaxis().set_ticks([])
                     ax[x,y].get_yaxis().set_ticks([])
 
-            fig.suptitle(f'{self.binary.channels[channel]}')
-            fig.savefig(f'{self.SOM_path}-ch_{channel}-split.pdf')
+            fig.suptitle(f'{binary.channels[channel]}')
+            fig.savefig(f'{binary.SOM_path}-ch_{channel}-split.pdf')
 
-        elif mode == 'raw':
+        elif plt_mode == 'raw':
             fig, ax = plt.subplots(1,1)
 
             im = ax.imshow(data, cmap=plt.get_cmap(color_map), norm=mpl.colors.SymLogNorm(0.03))
             ax.get_xaxis().set_ticks([])
             ax.get_yaxis().set_ticks([])  
-            ax.set(title=f'{self.binary.channels[channel]} Layer')          
+            ax.set(title=f'{binary.channels[channel]} Layer')          
             fig.colorbar(im, label='Intensity')
-            fig.savefig(f'{self.SOM_path}-ch_{channel}.pdf')
+            fig.savefig(f'{binary.SOM_path}-ch_{channel}.pdf')
 
-        elif mode == 'grid':
+        elif plt_mode == 'grid':
             from mpl_toolkits.axes_grid1 import make_axes_locatable
             
-            chans = len(self.binary.channels)
+            chans = len(binary.channels)
             
             cols = 2 if chans > 1 else 1
             rows = int(chans/cols + 0.5)
 
             fig, axes = plt.subplots(rows, cols)
-            for count, ax in enumerate(fig.axes):
-                params = self.retrieve_som_data(channel=count)
+            for c, ax in enumerate(fig.axes):
+                params = self.retrieve_som_data(channel=c, count=mode)
                 if params is None:
                     return
-                (data, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height) = params
+                (binary, data, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height) = params
 
-                ax.set(title=self.binary.channels[count])
+                ax.set(title=binary.channels[c])
 
                 im = ax.imshow(data, cmap=plt.get_cmap(color_map))
                 ax.get_xaxis().set_ticks([])
@@ -1034,7 +1043,7 @@ class Pink(Base):
                 fig.colorbar(im, cax=cax0, label='Intensity')
 
             fig.tight_layout()
-            fig.savefig(f'{self.SOM_path}-grid.pdf')
+            fig.savefig(f'{binary.SOM_path}-grid.pdf')
 
     def _process_heatmap(self, image_number=0, plot=False, channel=0, binary=None, save=None):
         '''Function to process the heatmap file produced by the `--map`
@@ -1118,19 +1127,21 @@ class Pink(Base):
 
             return data
 
-    def _apply_heatmap(self, binary):
+    def _apply_heatmap(self, binary, SOM):
         '''Function to loop through the Pink map output (i.e. self.heatmap) and 
         read in as a list each source heatmap
 
         binary - Binary
              An instance of the Binary class. Is influenced by the mode of the calling
              function
+        SOm - Binary
+            An instance of the Binary class used to provide the trained map
         '''
         result = []
         for index, src in enumerate(binary.sources):
             result.append(self._process_heatmap(binary=binary, image_number=index))
         
-        binary.src_heatmap = result
+        binary.src_heatmap[SOM.SOM_path] = result
 
     def _reterive_binary(self, mode):
         '''Helper function to reterive a binary file from. This will return a validation
@@ -1151,7 +1162,7 @@ class Pink(Base):
         else:
             return self.binary[mode]
 
-    def map(self, mode='train', plot=False, apply=True, **kwargs):
+    def map(self, mode='train', plot=False, apply=True, SOM_mode=None, **kwargs):
         '''Using Pink, produce a heatmap of the input Binary instance. 
         Note that by default the Binary instance attached to self.binary will be used. 
 
@@ -1163,21 +1174,30 @@ class Pink(Base):
              This will show the first source of the binary object
         apply - bool
              Add an attribute to the class instance with the list of heatmaps
+        SOM_mode - str or None
+             If None, the path to the SOM to use when mapping will be used from the 
+             binary objected returned with the `mode` options. Otherwise, attempt
+             to load the SOM from the binary returned with SOM and _reterive_binary()
         kwargs - dict
              Additional parameters passed directly to _process_heatmap()
         '''
         binary = self._reterive_binary(mode)
         
+        if SOM_mode is None:
+            SOM_binary = binary
+        else:
+            SOM_binary = self._reterive_binary(SOM_mode)
+
         if not self.trained:
             return
-        if binary.SOM_hash != get_hash(binary.SOM_path):
-            raise ValueError(f'The hash checked failed for {binary.SOM_path}')        
+        if SOM_binary.SOM_hash != get_hash(SOM_binary.SOM_path):
+            raise ValueError(f'The hash checked failed for {SOM_binary.SOM_path}')        
         if binary.binary_hash != get_hash(binary.binary_path):
             raise ValueError(f'The hash checked failed for {binary.binary_path}')
 
         pink_avail = True if shutil.which('Pink') is not None else False        
         # exec_str = f'Pink --cuda-off --map {self.binary.binary_path} {self.heat_path} {self.SOM_path} '
-        exec_str = f'Pink --map {binary.binary_path} {binary.heat_path} {binary.SOM_path} '
+        exec_str = f'Pink --map {binary.binary_path} {binary.heat_path} {SOM_binary.SOM_path} '
         exec_str += ' '.join(f'--{k}={v}' for k,v in self.pink_args.items())
         
         if pink_avail:
@@ -1189,22 +1209,9 @@ class Pink(Base):
             if plot:
                 self._process_heatmap(plot=plot, binary=binary, **kwargs)
             if apply:
-                self._apply_heatmap(binary)
+                self._apply_heatmap(binary, SOM_binary)
         else:
             print('PINK can not be found on this system...')
-
-    def map_TODO(self, mode='train', **kwargs):
-        '''Wrapper around the _map method to handle a list of binary objects
-        used for training.
-
-        See self._map() for function arguments. 
-        '''
-
-        # TODO: Add a binary and SOM option to _map(). If SOM is nothing, presume that
-        #       binary has a correct SOM_path map. If binary and SOM are different, map
-        #       the images in binary to the map in SOM argument
-
-        # TODO: Best way to perform mapping here?
 
     def _numeric_plot(self, book, shape, save=None):
         '''Isolated function to plot the attribute histogram if the data is 
@@ -1368,23 +1375,27 @@ class Pink(Base):
         func - Function or callable
              Function that may be applied to each of the instances of Source
         '''
-        self._reterive_binary(mode)
+        binary = self._reterive_binary(mode)
 
         if binary is None:
             return
 
-        shape = binary.src_heatmap[0].shape
+        if func is None:
+            func = self._source_rgz
+
+        heatmaps = binary.src_heatmap[binary.SOM_path]
+        shape = heatmaps[0].shape
         items = binary.get_data(label=label, func=func)
 
         book = defaultdict(list)
         if realisations == 1:
-            for heat, item in zip(binary.src_heatmap, items):
+            for heat, item in zip(heatmaps, items):
                 loc = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
                 book[loc].append(item)
         else:
             # print('Starting realisations')
             pixels = range(np.prod(shape))
-            for heat, item in zip(binary.src_heatmap, items):
+            for heat, item in zip(heatmaps, items):
                 loc_d = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
                 counter = defaultdict(int)
                 
@@ -1496,11 +1507,18 @@ class Pink(Base):
                 a = [a]
             return [ i['name'] for i in a ]
 
-    def validator(self, realisations=1, func=None, pack=True):
+    def validator(self, mode='validate', SOM_mode='train' , realisations=1, func=None, pack=True):
         '''The code to check the validate data agaisnt the training data. Use the distribution
         of labels from some neuron from the training data to predict the label of the source
         from the validate set
 
+        mode - str or int
+             Value passed to _reterive_binary(). This should almost certainly remain set as
+             `validate`, although I am leaving it as an option if I have to change things
+             down the line
+        SOM_mode - str or int
+             Value pased to _reterive_binary(). This is the binary that will be seen as ground
+             truth and what the validate binary is compared agaisnt
         realisations - int
              The number of times to use the heatmap to select a position to put something
         func - None or Function
@@ -1511,15 +1529,19 @@ class Pink(Base):
         '''
         from collections import Counter
 
+        if mode != 'validate':
+            print(f'WARNING: validation binary is set to {mode}')
+
         # Get items
-        train = self._reterive_binary('train')
+        train = self._reterive_binary(SOM_mode)
         valid = self.validate_binary
+        valid = self._reterive_binary(mode)
 
         # Get the `book` object from the training data with label types
         if func is None:
             func = self._source_rgz
 
-        book = self.attribute_heatmap(func=func, realisations=realisations, plot=False)
+        book = self.attribute_heatmap(func=func, mode=SOM_mode, realisations=realisations, plot=False)
         answer_book = defaultdict( lambda : {'correct':0,'wrong':0, 'accuracy':0} )
 
         # For speed, loop through the entire `book` object once now and flatten the items
@@ -1527,7 +1549,7 @@ class Pink(Base):
             v = [i for items in book[key] for i in items]
             book[key] = v
 
-        for src, heat in zip(valid.sources, valid.src_heatmap):
+        for src, heat in zip(valid.sources, valid.src_heatmap[train.SOM_path]):
             loc = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
 
             # Build up the distribution of answers here
@@ -1556,6 +1578,9 @@ class Pink(Base):
         flattened_book = {f'{k}_{k2}': v2 for k, v in answer_book.items() for k2, v2 in v.items()}
 
         if pack:
+            flattened_book['train_segment'] = SOM_mode
+            flattened_book['validate_path'] = valid.binary_path
+            flattened_book['trained_SOM'] = train.binary_path
             flattened_book['realisations'] = realisations
             flattened_book['experiment'] = self.project_dir
             flattened_book.update(train.preprocessor_args)
@@ -2024,9 +2049,25 @@ if __name__ == '__main__':
                         validate_binary=validate_bin) 
 
             pink.train()
+            results = []
             for i, t in enumerate(pink.binary):
                 pink.map(mode=i)   
+                pink.map(mode='validate', SOM_mode=i)   
+                pink.show_som(channel=0, mode=i)
+                pink.show_som(channel=0, mode=i, plt_mode='split')
+                pink.show_som(channel=0, mode=i, plt_mode='grid')
+                pink.show_som(channel=1, mode=i)
+                pink.show_som(channel=1, mode=i, plt_mode='split')
+                pink.show_som(channel=1, mode=i, plt_mode='grid')
+                pink.attribute_heatmap(save=f'train_{i}_labels_dist.pdf', mode=i)
+                pink.attribute_heatmap(save=f'train_{i}_labels_dist.pdf', mode=i, realisations=1000)
+                
+                validation_res = pink.validator(SOM_mode=i)
 
+                results.append(validation_res)
+        
+            df = pd.DataFrame(results)
+            print(df)
         else:
             print('Options:')
             print(' -r : Run test code to scan in RGZ image data')
