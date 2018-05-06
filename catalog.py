@@ -1549,35 +1549,45 @@ class Pink(Base):
             v = [i for items in book[key] for i in items]
             book[key] = v
 
+        empty = 0
+
         for src, heat in zip(valid.sources, valid.src_heatmap[train.SOM_path]):
             loc = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
 
-            # Build up the distribution of answers here
-            # v = [i for items in book[loc] for i in items]
-            v = book[loc]
-            c = Counter(v)
-            arr = np.array([i for i in c.values()])
-            items = [i for i in c.keys()]
+            # Capture an error if we can't increment counters. Most'y happens
+            # when the book object doesnt have a loc
+            try:
+                # Build up the distribution of answers here
+                # v = [i for items in book[loc] for i in items]
+                v = book[loc]
+                c = Counter(v)
+                arr = np.array([i for i in c.values()])
+                items = [i for i in c.keys()]
 
-            # Given the distribution of answers for that Neuron, make the guess.
-            guess = items[np.argmax(arr)]
-            
-            # Using the distribution as a method of selecting generally does pretty poorly...
-            # guess = np.random.choice(items, p=arr / np.sum(arr))
-
-            if guess in [i for i in func(src)]:
-                answer_book[guess]['correct'] += 1
-                answer_book['total']['correct'] += 1
-            else:
-                answer_book[guess]['wrong'] += 1
-                answer_book['total']['wrong'] += 1
-            answer_book[guess]['accuracy'] = answer_book[guess]['correct'] / (answer_book[guess]['correct']+answer_book[guess]['wrong'] )
-            answer_book['total']['accuracy'] = answer_book['total']['correct'] / (answer_book['total']['correct']+answer_book['total']['wrong'] )
+                # Given the distribution of answers for that Neuron, make the guess.
+                guess = items[np.argmax(arr)]
                 
+                # Using the distribution as a method of selecting generally does pretty poorly...
+                # guess = np.random.choice(items, p=arr / np.sum(arr))
+
+                if guess in [i for i in func(src)]:
+                    answer_book[guess]['correct'] += 1
+                    answer_book['total']['correct'] += 1
+                else:
+                    answer_book[guess]['wrong'] += 1
+                    answer_book['total']['wrong'] += 1
+                answer_book[guess]['accuracy'] = answer_book[guess]['correct'] / (answer_book[guess]['correct']+answer_book[guess]['wrong'] )
+                answer_book['total']['accuracy'] = answer_book['total']['correct'] / (answer_book['total']['correct']+answer_book['total']['wrong'] )
+            except:
+                empty += 1    
         # Flatten out the dict of dicts into a single dict
         flattened_book = {f'{k}_{k2}': v2 for k, v in answer_book.items() for k2, v2 in v.items()}
 
         if pack:
+            flattened_book['empty_neuron_attempts'] = empty
+            flattened_book['train_src_hash'] = train.binary_hash
+            flattened_book['train_SOM_hash'] = train.SOM_hash
+            flattened_book['valid_src_hash'] = valid.binary_hash
             flattened_book['train_segment'] = SOM_mode
             flattened_book['validate_path'] = valid.binary_path
             flattened_book['trained_SOM'] = train.binary_path
