@@ -102,6 +102,9 @@ class Base(object):
 
         return obj
 
+    def __repr__(self):
+        return self.__str__()
+
 class Source(Base):
     '''Object class to handle a single object from a catalogue, downloading
     images, saving images, reprojecting them onto a common grid, and dumping
@@ -514,6 +517,10 @@ class Binary(Base):
         self.heat_hash = ''
         self.src_heatmap = None
 
+        self.SOM_path = f'{self.binary_path}.Trained_SOM'
+        self.SOM_hash = ''
+        self.trained = False
+
     @property
     def preprocessor_args(self):
         '''Reterive the pre-processor arguments of this Binary file
@@ -740,7 +747,7 @@ class Catalog(Base):
 
         return Binary(binary_out, sources, sigma, norm, log10, convex, channels=channels, project_dir=project_dir)
 
-    def dump_binary(self, binary_out, *args, fraction=None, **kwargs):
+    def dump_binary(self, binary_out, *args, fraction=None, segments=None, **kwargs):
         '''This function wraps around the self._write_binary() function. If we are splitting 
         the data into a training and validation set, do it here, and pass through the relevant
         information to the _write_binary() method, including the sources for each set. Modify
@@ -748,32 +755,63 @@ class Catalog(Base):
 
         binary_out - str
                The name of the binary file to write out
-
-        fraction - None of float
+        fraction - None or float
               If fraction is None, write out all files to the single binary file. If it is a
               float, between 0 to 1, split it into the training and validation sets, and return
               a Binary instance for each
+        segments - None or Int
+             The number of data partitions to make from the training data. One will be kept
+             for validation. For instance, if segments=5, four will be used for training and
+             one will be for validation
         '''
-        if fraction is None:
+        import copy
+
+        if fraction is None and segments is None:
             return self._write_binary(binary_out, *args, **kwargs)
 
-        assert 0. <= fraction <= 1., ValueError('Fraction has to be between 0 to 1')
+        if fraction is not None:
+            assert 0. <= fraction <= 1., ValueError('Fraction has to be between 0 to 1')
 
-        # First shuffle the list
-        random.shuffle(self.valid_sources)
+            # First shuffle the list. Make a deep copy to ensure not funny business happens
+            # calling dump binary multiple time. I don't think it would happen but I ***think***
+            # this helps ensure it
+            cp_valid_sources = copy.deepcopy(self.valid_sources)
+            random.shuffle(cp_valid_sources)
 
-        # Next calculate the size of the spliting to do
-        pivot = int(len(self.valid_sources)*fraction)
-        train = self.valid_sources[:pivot]
-        validate = self.valid_sources[pivot:]
+            # Next calculate the size of the spliting to do
+            pivot = int(len(cp_valid_sources)*fraction)
+            train = cp_valid_sources[:pivot]
+            validate = cp_valid_sources[pivot:]
 
-        print(f'Length of the training set: {len(train)}')
-        print(f'Length of the validate set: {len(validate)}')
+            print(f'Length of the training set: {len(train)}')
+            print(f'Length of the validate set: {len(validate)}')
 
-        train_bin = self._write_binary(f'{binary_out}_train', *args, sources=train, **kwargs)
-        validate_bin = self._write_binary(f'{binary_out}_validate', *args, sources=validate, **kwargs)
+            train_bin = self._write_binary(f'{binary_out}_train', *args, sources=train, **kwargs)
+            validate_bin = self._write_binary(f'{binary_out}_validate', *args, sources=validate, **kwargs)
 
-        return (train_bin, validate_bin)
+            return (train_bin, validate_bin)
+        
+        elif segments is not None:
+            # First shuffle the list
+            cp_valid_sources = copy.deepcopy(self.valid_sources)
+            random.shuffle(cp_valid_sources)
+
+            stride = len(cp_valid_sources) // segments
+
+            train_segments = [ cp_valid_sources[i*stride:i*stride+stride] for i in range(segments-1) ]
+            validate = cp_valid_sources[(segments-1)*stride:]
+
+            print('Length of valid_sources: ', len(self.valid_sources))
+            print('Number of segments: ', segments)
+            for count, i in enumerate(train_segments):
+                print(f'Train {count} : {len(i)}')
+            print('Valid : ', len(validate))
+
+            train_bin = [ self._write_binary(f'{binary_out}_train_{count}', *args, sources=train, **kwargs) \
+                                for count, train in enumerate(train_segments) ]
+            validate_bin = self._write_binary(f'{binary_out}_validate', *args, sources=validate, **kwargs)
+            
+            return (train_bin, validate_bin)
 
 class Pink(Base):
     '''Manage a single Pink training session, including the arguments used to run
@@ -803,16 +841,19 @@ class Pink(Base):
         validate_binary - Binary
              The Binary object that will be used to validate the results of the training agaisnt
         '''
-        if not isinstance(binary, Binary):
-            raise TypeError(f'binary is expected to be instance of Binary class, not {type(binary)}')
+        if not (isinstance(binary, Binary) or isinstance(binary, list)):
+            raise TypeError(f'binary is expected to be instance of Binary or list class, not {type(binary)}')
 
         self.trained = False
+
+        if isinstance(binary, Binary):
+            binary = [binary]
         self.binary = binary
-        self.project_dir = self.binary.project_dir
+        # Lets just assume all will have the same project_dir. 
+        self.project_dir = self.binary[0].project_dir
+
         # Items to generate the SOM
-        self.SOM_path = f'{self.binary.binary_path}.Trained_SOM'
-        self.SOM_hash = ''
-        self.exec_str = ''
+        self.exec_str = ['' for b in self.binary]
 
         self.validate_binary = validate_binary
 
@@ -830,46 +871,67 @@ class Pink(Base):
         '''
         self.pink_args.update(kwargs)
 
-    def train(self):
+    def _train(self, binary=None, SOM_path=None):
         '''Train the SOM with PINK using the supplied options and Binary file
+        
+        binary - None or Binary
+             If None, use the self.binary attribute. Otherwise, try on the provided
+             binary
+        SOM_path - None or str
+             If None, use the self.SOM_path attribute. Otherwise, try on the provided
+             SOM_path value
         '''
         if self.trained:
             print('The SOM has been trained already')
             return
         
-        if not os.path.exists(self.binary.binary_path):
-            raise ValueError(f'Unable to locate {self.binary.binary_path}')
+        if not os.path.exists(binary.binary_path):
+            raise ValueError(f'Unable to locate {binary.binary_path}')
         
-        if self.binary.binary_hash != get_hash(self.binary.binary_path):
-            raise ValueError(f'The hash checked failed for {self.binary.binary_path}')
+        if binary.binary_hash != get_hash(binary.binary_path):
+            raise ValueError(f'The hash checked failed for {binary.binary_path}')
 
         pink_avail = True if shutil.which('Pink') is not None else False
-        exec_str  = f'Pink --train {self.binary.binary_path} {self.SOM_path} '
+        exec_str  = f'Pink --train {binary.binary_path} {binary.SOM_path} '
         exec_str += ' '.join(f'--{k}={v}' for k,v in self.pink_args.items())
 
         if pink_avail:
-            self.exec_str = exec_str
-            self.pink_process = subprocess.run(self.exec_str.split())
-            self.trained = True
-            self.SOM_hash = get_hash(self.SOM_path)
+            subprocess.run(exec_str.split())
+            binary.SOM_hash = get_hash(binary.SOM_path)
+            binary.trained = True
         else:
             print('PINK can not be found on this system...')
 
-    def retrieve_som_data(self, channel=0):
+    def train(self):
+        '''Wrapper around the _train() method that will actual perform the training. Here
+        we do the working to handle the case of multiple training binaries, whic is the case
+        when the segments option is used. It should be fairly transparent to the calling 
+        function. 
+        '''
+        results = []
+        for count, train in enumerate(self.binary):
+            self._train(binary=train)
+
+        self.trained = True
+
+    def retrieve_som_data(self, channel=0, count=0):
         '''If trained, this function will return the SOM data from some desired
         channel
 
         channel - int or None
              The channel from the some to retrieve. If a negative number or None
              return the entire structure, otherwise return that channel number
+        count - int
+             The trained binary from which to pull the SOM from. This is important
+             if cross validation has been used
         '''
         if not self.trained:
             return None
         
-        if get_hash(self.SOM_path) != self.SOM_hash:
+        if get_hash(self.SOM_path[count]) != self.SOM_hash[count]:
             return None
 
-        with open(self.SOM_path, 'rb') as som:
+        with open(self.SOM_path[count], 'rb') as som:
             # Unpack the header information
             numberOfChannels, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height = struct.unpack('i' * 6, som.read(4*6))
             SOM_size = np.prod([SOM_width, SOM_height, SOM_depth])
@@ -994,7 +1056,7 @@ class Pink(Base):
                set by save
         '''
         if binary is None:
-            binary = self.binary
+            binary = self.binary[0]
         
         if save is not None:
             save = self._path_build(save)
@@ -1070,6 +1132,25 @@ class Pink(Base):
         
         binary.src_heatmap = result
 
+    def _reterive_binary(self, mode):
+        '''Helper function to reterive a binary file from. This will return a validation
+        binary, or one of the training binaries. At the very least, there will always be
+        one training binary
+
+        mode - str or int
+             If str, it will return the self.validate_binary if `validate` specified, or return
+             then first self.binary item if `train` specified. If an int is provided, then that
+             is used as an index to self.binary
+        '''
+        if not (isinstance(mode, str) or isinstance(mode, int)):
+            raise ValueError(f'binary mode {mode} not supported. Supported modes are either `train`, `validate` or an integer index')
+        elif mode == 'train':
+            return self.binary[0]
+        elif mode == 'validate':
+            return self.validate_binary
+        else:
+            return self.binary[mode]
+
     def map(self, mode='train', plot=False, apply=True, **kwargs):
         '''Using Pink, produce a heatmap of the input Binary instance. 
         Note that by default the Binary instance attached to self.binary will be used. 
@@ -1085,27 +1166,18 @@ class Pink(Base):
         kwargs - dict
              Additional parameters passed directly to _process_heatmap()
         '''
-        modes = ['train','validate']
-        if mode not in modes:
-            raise ValueError(f'binary mode {mode} not supported. Supported modes are {modes}')
-        elif mode == 'train':
-            binary = self.binary
-        else:
-            binary = self.validate_binary
-
-        if binary is None:
-            return
-
+        binary = self._reterive_binary(mode)
+        
         if not self.trained:
             return
-        if self.SOM_hash != get_hash(self.SOM_path):
-            raise ValueError(f'The hash checked failed for {self.SOM_path}')        
+        if binary.SOM_hash != get_hash(binary.SOM_path):
+            raise ValueError(f'The hash checked failed for {binary.SOM_path}')        
         if binary.binary_hash != get_hash(binary.binary_path):
             raise ValueError(f'The hash checked failed for {binary.binary_path}')
 
         pink_avail = True if shutil.which('Pink') is not None else False        
         # exec_str = f'Pink --cuda-off --map {self.binary.binary_path} {self.heat_path} {self.SOM_path} '
-        exec_str = f'Pink --map {binary.binary_path} {binary.heat_path} {self.SOM_path} '
+        exec_str = f'Pink --map {binary.binary_path} {binary.heat_path} {binary.SOM_path} '
         exec_str += ' '.join(f'--{k}={v}' for k,v in self.pink_args.items())
         
         if pink_avail:
@@ -1120,6 +1192,19 @@ class Pink(Base):
                 self._apply_heatmap(binary)
         else:
             print('PINK can not be found on this system...')
+
+    def map_TODO(self, mode='train', **kwargs):
+        '''Wrapper around the _map method to handle a list of binary objects
+        used for training.
+
+        See self._map() for function arguments. 
+        '''
+
+        # TODO: Add a binary and SOM option to _map(). If SOM is nothing, presume that
+        #       binary has a correct SOM_path map. If binary and SOM are different, map
+        #       the images in binary to the map in SOM argument
+
+        # TODO: Best way to perform mapping here?
 
     def _numeric_plot(self, book, shape, save=None):
         '''Isolated function to plot the attribute histogram if the data is 
@@ -1283,13 +1368,7 @@ class Pink(Base):
         func - Function or callable
              Function that may be applied to each of the instances of Source
         '''
-        modes = ['train','validate']
-        if mode not in modes:
-            raise ValueError(f'binary mode {mode} not supported. Supported modes are {modes}')
-        elif mode == 'train':
-            binary = self.binary
-        else:
-            binary = self.validate_binary
+        self._reterive_binary(mode)
 
         if binary is None:
             return
@@ -1318,12 +1397,6 @@ class Pink(Base):
                 for loc in locs:
                     book[loc].append(item)
                     counter[loc] += 1
-                # print(counter, loc_d, counter[loc_d])
-
-                # fig, ax = plt.subplots(1,2)
-                # ax[0].imshow(heat)
-                # ax[1].imshow(prob)
-                # plt.show()
 
         if plot:
             if realisations == 1:
@@ -1353,13 +1426,7 @@ class Pink(Base):
         '''
         import matplotlib as mpl
 
-        modes = ['train','validate']
-        if mode not in modes:
-            raise ValueError(f'binary mode {mode} not supported. Supported modes are {modes}')
-        elif mode == 'train':
-            binary = self.binary
-        else:
-            binary = self.validate_binary
+        binary = self._reterive_binary(mode)
 
         if binary is None:
             return
@@ -1445,7 +1512,7 @@ class Pink(Base):
         from collections import Counter
 
         # Get items
-        train = self.binary
+        train = self._reterive_binary('train')
         valid = self.validate_binary
 
         # Get the `book` object from the training data with label types
@@ -1498,7 +1565,7 @@ class Pink(Base):
 
 if __name__ == '__main__':
 
-    FRACTION = 0.5
+    FRACTION = 0.8
     PROJECTS_DIR = 'Experiments'
     NUM_ITER = 10
     COLLECTION = [('Experiments/FIRST_Norm_Log_3/TEST1.pink', 'plots'),
@@ -1842,11 +1909,11 @@ if __name__ == '__main__':
                     print(f'Loading {pink_file}\n')
                     pink = Pink.loader(pink_file)
 
-                    # pink.show_som(channel=0)
-                    # pink.show_som(channel=0, mode='split')
-                    # pink.show_som(channel=1)
-                    # pink.show_som(channel=1, mode='split')
-                    # pink.show_som(channel=1, mode='grid')
+                    pink.show_som(channel=0)
+                    pink.show_som(channel=0, mode='split')
+                    pink.show_som(channel=1)
+                    pink.show_som(channel=1, mode='split')
+                    pink.show_som(channel=1, mode='grid')
 
                     # def reduce1(s):
                     #     # If there is only one object, its returned as dict. Test and list it if needed            
@@ -1901,8 +1968,8 @@ if __name__ == '__main__':
                     pink.attribute_heatmap(func=reduce2, xtick_rotation=90, save=f'valid_realisations_label_comp_counts.pdf',
                                           color_map='Blues', mode='validate', realisations=10000)
 
-                    # pink.count_map(plot=True, save=f'train_count_map.pdf', mode='train')
-                    # pink.count_map(plot=True, save=f'valid_count_map.pdf', mode='validate')
+                    pink.count_map(plot=True, save=f'train_count_map.pdf', mode='train')
+                    pink.count_map(plot=True, save=f'valid_count_map.pdf', mode='validate')
 
                     plt.close('all')
 
@@ -1929,9 +1996,41 @@ if __name__ == '__main__':
             df.to_csv('Validator_Results.csv')
             df.to_pickle('Validator_Results.pkl')
 
+        elif '-c' == i:
+            PROJECTS_DIR = 'Cross_Validation'
+    
+            rgz_dir = 'rgz_rcnn_data'
+
+            cat = Catalog(rgz_dir=rgz_dir)
+
+            # Commenting out to let me ctrl+C without killing things
+            # cat.save_sources()
+
+            print('\nValidating sources...')
+            cat.collect_valid_sources()
+            bins = cat.dump_binary('TEST_chan.binary', norm=True, sigma=[3., False], log10=[True,False], 
+                            channels=['FIRST'],
+                            project_dir=f'{PROJECTS_DIR}/FIRST_Norm_Log_3_Cross',
+                            segments=4)
+
+            train_bin, validate_bin = bins
+            print(train_bin)
+            print(validate_bin)
+
+            pink = Pink(train_bin, 
+                        pink_args={'som-width':4,
+                                   'som-height':4,
+                                   'num-iter':1},
+                        validate_binary=validate_bin) 
+
+            pink.train()
+            for i, t in enumerate(pink.binary):
+                pink.map(mode=i)   
+
         else:
             print('Options:')
             print(' -r : Run test code to scan in RGZ image data')
             print(' -t : Run test code for the Transform outputs and heatmap')
             print(' -v : Run test code for Validator')
+            print(' -c : Run test code for cross-validation')
             sys.exit(0)
