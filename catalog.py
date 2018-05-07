@@ -514,8 +514,8 @@ class Binary(Base):
         if project_dir != '.':
             make_dir(project_dir)
 
-        self.heat_path = f'{self.binary_path}.heat'
-        self.heat_hash = ''
+        self.heat_path = {}
+        self.heat_hash = {}
         self.src_heatmap = {}
 
         self.SOM_path = f'{self.binary_path}.Trained_SOM'
@@ -814,22 +814,15 @@ class Catalog(Base):
             
             return (train_bin, validate_bin)
 
-class Pink(Base):
+class Pink(Base): 
     '''Manage a single Pink training session, including the arguments used to run
     it, the binary file used to train it, and interacting with the results afterwards
     '''
     def __str__(self):
         '''Neatly print the contents of the instance
         '''
-        out = f'The binary file attached: {self.binary.binary_path}\n'
-        out+= f'Contains {len(self.binary.sources)} sources\n'
-        out+= f'Channels are {self.binary.channels}\n'
-        if self.trained:
-            out+= f'SOM is trained: {self.SOM_path}\n'
-            out+= f'SOM weight hash is {self.SOM_hash}\n'
-        else:
-            out+= 'SOM is not trained'
-
+        out = f'{len(self.binary.binary_path)} binary files attached\n'
+        
         return out
 
     def __init__(self, binary, pink_args = {}, validate_binary=None):
@@ -863,6 +856,25 @@ class Pink(Base):
         else:
             self.pink_args = {'som-width':10,
                               'som-height':10}
+
+    def _reterive_binary(self, mode):
+        '''Helper function to reterive a binary file from. This will return a validation
+        binary, or one of the training binaries. At the very least, there will always be
+        one training binary
+
+        mode - str or int
+             If str, it will return the self.validate_binary if `validate` specified, or return
+             then first self.binary item if `train` specified. If an int is provided, then that
+             is used as an index to self.binary
+        '''
+        if not (isinstance(mode, str) or isinstance(mode, int)):
+            raise ValueError(f'binary mode {mode} not supported. Supported modes are either `train`, `validate` or an integer index')
+        elif mode == 'train':
+            return self.binary[0]
+        elif mode == 'validate':
+            return self.validate_binary
+        else:
+            return self.binary[mode]
 
     def update_pink_args(self, **kwargs):
         '''Helper function to update pink arguments that may not have been included
@@ -1143,28 +1155,10 @@ class Pink(Base):
         
         binary.src_heatmap[SOM.SOM_path] = result
 
-    def _reterive_binary(self, mode):
-        '''Helper function to reterive a binary file from. This will return a validation
-        binary, or one of the training binaries. At the very least, there will always be
-        one training binary
-
-        mode - str or int
-             If str, it will return the self.validate_binary if `validate` specified, or return
-             then first self.binary item if `train` specified. If an int is provided, then that
-             is used as an index to self.binary
-        '''
-        if not (isinstance(mode, str) or isinstance(mode, int)):
-            raise ValueError(f'binary mode {mode} not supported. Supported modes are either `train`, `validate` or an integer index')
-        elif mode == 'train':
-            return self.binary[0]
-        elif mode == 'validate':
-            return self.validate_binary
-        else:
-            return self.binary[mode]
-
     def map(self, mode='train', plot=False, apply=True, SOM_mode=None, **kwargs):
         '''Using Pink, produce a heatmap of the input Binary instance. 
-        Note that by default the Binary instance attached to self.binary will be used. 
+        Note that by default the first training Binary instance attached to self.binary 
+        will be used. 
 
         mode - `train` or `validate`
              Specify which of the attached Binary instances we should map and process.
@@ -1185,9 +1179,15 @@ class Pink(Base):
         
         if SOM_mode is None:
             SOM_binary = binary
+            heat_path = f'{binary.binary_path}.{mode}.heat'
+            heat_key = binary.SOM_path
+            binary.heat_path[heat_key] = heat_path
         else:
             SOM_binary = self._reterive_binary(SOM_mode)
-
+            heat_path = f'{binary.binary_path}.{SOM_mode}.heat'            
+            heat_key = SOM_binary.SOM_path
+            binary.heat_path[SOM_binary.SOM_path] = heat_path
+            
         if not self.trained:
             return
         if SOM_binary.SOM_hash != get_hash(SOM_binary.SOM_path):
@@ -1197,13 +1197,13 @@ class Pink(Base):
 
         pink_avail = True if shutil.which('Pink') is not None else False        
         # exec_str = f'Pink --cuda-off --map {self.binary.binary_path} {self.heat_path} {self.SOM_path} '
-        exec_str = f'Pink --map {binary.binary_path} {binary.heat_path} {SOM_binary.SOM_path} '
+        exec_str = f'Pink --map {binary.binary_path} {heat_path} {SOM_binary.SOM_path} '
         exec_str += ' '.join(f'--{k}={v}' for k,v in self.pink_args.items())
         
         if pink_avail:
-            if not os.path.exists(binary.heat_path):
+            if not os.path.exists(heat_path):
                 subprocess.run(exec_str.split())
-                binary.heat_hash = get_hash(binary.heat_path)
+                binary.heat_hash[heat_key] = get_hash(heat_path)
             else:
                 print('Not running PINK to map, file exists.\n')
             if plot:

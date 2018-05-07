@@ -1,18 +1,30 @@
 import pandas as pd
 from catalog import Source, Binary, Catalog, Pink
 from itertools import product
+import matplotlib.pyplot as plt
+
 
 def FIRST():
     PROJECT_DIR = 'Script_Experiments'
     CHANNELS = [['FIRST'], ['FIRST', 'WISE_W1']]
-    BINARY_OPTS = [{'segments':4, 'norm':False, 'log10': False, 'sigma':False, 'project_dir':f'{PROJECT_DIR}/FIRST_NoNorm_NoLog_NoSig'},
-                   {'segments':4, 'norm':True, 'log10': False, 'sigma':False, 'project_dir':f'{PROJECT_DIR}/FIRST_Norm_NoLog_NoSig'},
-                   {'segments':4, 'norm':True, 'log10': False, 'sigma':3., 'project_dir':f'{PROJECT_DIR}/FIRST_Norm_NoLog_3'},
-                   {'segments':4, 'norm':True, 'log10': True, 'sigma':3., 'project_dir':f'{PROJECT_DIR}/FIRST_Norm_Log_3'}]
+    CHANNELS = [['FIRST']]
+    BINARY_OPTS = [{'segments':4, 'norm':False, 'log10': False, 'sigma':False, 'project_dir':'NoNorm_NoLog_NoSig'},
+                   {'segments':4, 'norm':True, 'log10': False, 'sigma':False, 'project_dir':f'Norm_NoLog_NoSig'},
+                   {'segments':4, 'norm':True, 'log10': False, 'sigma':3., 'project_dir':f'Norm_NoLog_3'},
+                   {'segments':4, 'norm':True, 'log10': True, 'sigma':3., 'project_dir':f'Norm_Log_3'}]
+
+    BINARY_OPTS = [{'segments':4, 'norm':True, 'log10': False, 'sigma':3., 'project_dir':f'Norm_NoLog_3'},
+                   {'segments':4, 'norm':True, 'log10': True, 'sigma':3., 'project_dir':f'Norm_Log_3'}]
+
 
     PINK_OPTS = [{'som-width':3, 'som-height':3, 'num-iter':1},
                  {'som-width':7, 'som-height':7, 'num-iter':1},
-                 {'som-width':10, 'som-height':10, 'num-iter':1}]
+                 {'som-width':10, 'som-height':10, 'num-iter':1},
+                 {'som-width':13, 'som-height':13, 'num-iter':1}]
+
+    PINK_OPTS = [{'som-width':3, 'som-height':3, 'num-iter':1},
+                 {'som-width':7, 'som-height':7, 'num-iter':1}]
+
 
     rgz_dir = 'rgz_rcnn_data'
     cat = Catalog(rgz_dir=rgz_dir)
@@ -25,14 +37,17 @@ def FIRST():
 
     results = []
     
-    for bin_opts, pink_opts in product(BINARY_OPTS, PINK_OPTS):
+    for bin_opts, pink_opts, channels in product(BINARY_OPTS, PINK_OPTS, CHANNELS):
         print(bin_opts, pink_opts)
 
-        bin_opts['project_dir'] = f"{bin_opts['project_dir']}_{pink_opts['som-width']}x{pink_opts['som-height']}"
+        chan_name = '_'.join(channels)
+        project_dir = f"{PROJECT_DIR}/{chan_name}_{bin_opts['project_dir']}_{pink_opts['som-width']}x{pink_opts['som-height']}"
 
-        bins = cat.dump_binary('source.binary', channels=['FIRST'],
-                        project_dir=bin_opts['project_dir'],
-                        segments=4)
+        print(project_dir)
+
+        bins = cat.dump_binary('source.binary', channels=channels,
+                               project_dir=project_dir,
+                               segments=4)
 
         train_bin, validate_bin = bins
         
@@ -43,25 +58,28 @@ def FIRST():
         for i, t in enumerate(pink.binary):
             
             # Bug here somewhere. Not each train being compared agaisnt validate
-            # letting run to completion to see for other bugs..
+            # letting run to completion to see for other bugs.. Since the map from
+            # the vlidation has already been made on train 0, subsequent trains 1,2,3
+            # cant be made since the file already exists
             pink.map(mode=i)   
             pink.map(mode='validate', SOM_mode=i)   
             # ------------------------------------------------------------------
 
-
-            pink.show_som(channel=0, mode=i)
-            pink.show_som(channel=0, mode=i, plt_mode='split')
-            pink.show_som(channel=0, mode=i, plt_mode='grid')
-            pink.show_som(channel=1, mode=i)
-            pink.show_som(channel=1, mode=i, plt_mode='split')
-            pink.show_som(channel=1, mode=i, plt_mode='grid')
-            pink.attribute_heatmap(save=f'train_{i}_labels_dist.pdf', mode=i)
-            pink.attribute_heatmap(save=f'train_{i}_labels_dist.pdf', mode=i, realisations=1000)
+            # pink.show_som(channel=0, mode=i)
+            # pink.show_som(channel=0, mode=i, plt_mode='split')
+            # pink.show_som(channel=0, mode=i, plt_mode='grid')
+            # pink.show_som(channel=1, mode=i)
+            # pink.show_som(channel=1, mode=i, plt_mode='split')
+            # pink.show_som(channel=1, mode=i, plt_mode='grid')
+            # pink.attribute_heatmap(save=f'train_{i}_labels_dist.pdf', mode=i)
+            # pink.attribute_heatmap(save=f'train_{i}_labels_dist.pdf', mode=i, realisations=1000)
             
             validation_res = pink.validator(SOM_mode=i)
 
             results.append(validation_res)
-    
+
+            plt.close('all')
+
         df = pd.DataFrame(results)
         df.to_json('FIRST_Results.json')
 
