@@ -1433,15 +1433,9 @@ class Pink(Base):
         if plot:
             from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-            params = self.retrieve_som_data(channel=0)
-            if params is None:
-                return
-            (data, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height) = params
-
-
             fig, ax = plt.subplots(1,1)
 
-            im = ax.imshow(book, vmin=0)
+            im = ax.imshow(book, vmin=0, cmap=plt.get_cmap(color_map))
             ax.set(title='Counts per Neuron')
             ax.xaxis.set(ticklabels=[])
             ax.yaxis.set(ticklabels=[])
@@ -1449,7 +1443,7 @@ class Pink(Base):
             divider = make_axes_locatable(ax)
             cax0 = divider.append_axes('right', size='5%', pad=0.05)
             fig.colorbar(im, cax=cax0, label='Counts')
-            
+
             fig.tight_layout()
             # fig.show()
             if save is None:
@@ -1570,16 +1564,7 @@ if __name__ == '__main__':
     FRACTION = 0.8
     PROJECTS_DIR = 'Experiments'
     NUM_ITER = 10
-    COLLECTION = [('Experiments/FIRST_Norm_Log_3/TEST1.pink', 'plots'),
-                  ('Experiments/FIRST_Norm_NoLog_NoSig/TEST2.pink', 'plots'),
-                  ('Experiments/FIRST_NoNorm_Log_NoSig/TEST3.pink', 'plots'),
-                  ('Experiments/FIRST_NoNorm_NoLog_NoSig/TEST4.pink', 'plots'),
-                  ('Experiments/FIRST_WISE_Norm_Log_3/TEST5.pink', 'plots'),
-                  ('Experiments/FIRST_WISE_Norm_Log_3_Large/TEST7.pink', 'plots'),
-                  ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Large/TEST8.pink', 'plots'),
-                  ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex/TEST6.pink', 'plots'),
-                  ('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex_Large/TEST8.pink', 'plots')]
-    # COLLECTION = [('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex_Large/TEST8.pink', 'plots')]
+    COLLECTION = [('Experiments/FIRST_WISE_Norm_Log_3_NoSigWise_Convex_Large/TEST8.pink', 'plots')]
 
     for i in sys.argv[1:]:
    
@@ -1630,21 +1615,6 @@ if __name__ == '__main__':
                     pink.show_som(channel=1)
                     pink.show_som(channel=1, mode='split')
                     pink.show_som(channel=1, mode='grid')
-
-                    # def reduce1(s):
-                    #     # If there is only one object, its returned as dict. Test and list it if needed            
-                    #     a = s.rgz_annotations()
-                    #     if a is None:
-                    #         return ''
-                    #     else:
-                    #         a = a['object']
-                    #         if not isinstance(a, list):
-                    #             a = [a]
-                    #         return str(len(a))  
-                    # pink.attribute_heatmap(func=reduce1, save=f'train_number_counts.pdf',
-                    #                       color_map='Blues', mode='train')
-                    # pink.attribute_heatmap(func=reduce1, save=f'valid_number_counts.pdf',
-                    #                       color_map='Blues', mode='validate')
 
                     def reduce2(s):
                         # If there is only one object, its returned as dict. Test and list it if needed
