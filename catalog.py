@@ -518,6 +518,7 @@ class Binary(Base):
         self.heat_hash = {}
         self.src_heatmap = {}
 
+        # At most, a Binary instance can only have a single attached SOM file
         self.SOM_path = f'{self.binary_path}.Trained_SOM'
         self.SOM_hash = ''
         self.trained = False
@@ -1057,10 +1058,13 @@ class Pink(Base):
             fig.tight_layout()
             fig.savefig(f'{binary.SOM_path}-grid.pdf')
 
-    def _process_heatmap(self, image_number=0, plot=False, channel=0, binary=None, save=None):
+    def _process_heatmap(self, heat_key, image_number=0, plot=False, channel=0, binary=None, save=None):
         '''Function to process the heatmap file produced by the `--map`
         option in the Pink utility
 
+        heat_key - str
+            The key passed to _process_heatmap() that will open the correct map file
+            that corresponds to the distances of SOM.SOM_path
         image_number - int
                Index of the image to open and display the map for
         plot - bool
@@ -1082,7 +1086,7 @@ class Pink(Base):
         if save is not None:
             save = self._path_build(save)
 
-        with open(binary.heat_path, 'rb') as in_file:
+        with open(binary.heat_path[heat_key], 'rb') as in_file:
             numberOfImages, SOM_width, SOM_height, SOM_depth = struct.unpack('i' * 4, in_file.read(4*4))
             
             size = SOM_width * SOM_height * SOM_depth
@@ -1105,12 +1109,13 @@ class Pink(Base):
         binary - Binary
              An instance of the Binary class. Is influenced by the mode of the calling
              function
-        SOm - Binary
+        SOM - Binary
             An instance of the Binary class used to provide the trained map
+
         '''
         result = []
         for index, src in enumerate(binary.sources):
-            result.append(self._process_heatmap(binary=binary, image_number=index))
+            result.append(self._process_heatmap(SOM.SOM_path, binary=binary, image_number=index))
         
         binary.src_heatmap[SOM.SOM_path] = result
 
@@ -1318,7 +1323,8 @@ class Pink(Base):
         except:
             self._label_plot(book, shape, **kwargs)
             
-    def attribute_heatmap(self, realisations=1, mode='train', label=None, plot=True, func=None, *args, **kwargs):
+    def attribute_heatmap(self, realisations=1, mode='train', label=None, plot=True, 
+                                func=None, *args, **kwargs):
         '''Based on the most likely grid/best match in the heatmap for each source
         build up a distibution plot of each some label/parameters
 
@@ -1377,15 +1383,20 @@ class Pink(Base):
 
         return book
 
-    def count_map(self, mode='train', plot=False, save=None, color_map='bwr'):
+    def count_map(self, mode='train', SOM_mode= None, plot=False, save=None, color_map='bwr'):
         '''Produce a map of the number of images that best match each neuron. This
         will have the same shape as the SOM grid, and the counts in each cell should
         add to the number of images in the Binary file. For now, just use the heatmap
         attached to this Pink instance.
 
-        mode - `train` or `validate`
+        mode - `train` or `validate` or int
              Specify which of the attached Binary instances we should map and process.
-             If neither mode is selected, than raise an error
+             If int return that training segment
+        SOM_mode - see above
+            Return the binary so that the SOM_path attribute can be obtained and 
+            passed to grab the corresponding src_heatmap object that were created
+            agaisnt that SOM. If None, use the SOM_path attribute of the binary
+            returned by mode.
         plot - Bool
             Produce a figure of the counts per neuron
         save - None or Str
@@ -1401,13 +1412,20 @@ class Pink(Base):
         if binary is None:
             return
 
+        # Reterive the key that will be passed to src_heatmap dict
+        if SOM_mode is None:
+            SOM_path = binary.SOM_path
+        else:
+            SOM_binary = self._reterive_binary(SOM_mode)
+            SOM_path = SOM_binary.SOM_path
+
         if save is not None:
             save = self._path_build(save)
 
-        shape = binary.src_heatmap[0].shape
+        shape = binary.src_heatmap[SOM_path][0].shape
         book = np.zeros(shape)
 
-        for heat in binary.src_heatmap:
+        for heat in binary.src_heatmap[SOM_path]:
             loc = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
             book[loc] += 1           
 
@@ -1431,16 +1449,6 @@ class Pink(Base):
             divider = make_axes_locatable(ax)
             cax0 = divider.append_axes('right', size='5%', pad=0.05)
             fig.colorbar(im, cax=cax0, label='Counts')
-            # cax0.set(label='Counts')
-
-            # im2 = ax[1].imshow(data, cmap=plt.get_cmap(color_map))
-            # ax[1].set(title='Trained SOM')
-            # ax[1].xaxis.set(ticklabels=[])
-            # ax[1].yaxis.set(ticklabels=[])
-            
-            # divider = make_axes_locatable(ax[1])
-            # cax1 = divider.append_axes('right', size='5%', pad=0.05)
-            # fig.colorbar(im2, cax=cax1, label='Intensity')
             
             fig.tight_layout()
             # fig.show()
