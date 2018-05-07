@@ -1096,47 +1096,6 @@ class Pink(Base):
             data = np.swapaxes(data, 0, 2)
             data = np.reshape(data, (image_height, image_width))
 
-            # data /= data.sum()
-            # Simple diagnostic plot
-            if plot:
-                from mpl_toolkits.axes_grid1 import make_axes_locatable
-
-                # fig, (ax1, ax2, ax3, ax4) = plt.subplots(1,4)
-                fig, ax = plt.subplots(1,3)
-                params = self.retrieve_som_data(channel=channel)
-                if params is None:
-                    return
-                (som, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height) = params
-
-                src_img = binary.get_image(image_number)
-                loc = np.unravel_index(np.argmin(data, axis=None), data.shape)
-                
-                where = np.where(data==data.min())
-                loc2 = (where[0][0], where[1][0])
-
-                ax[0,0].imshow(data)
-                ax[0,0].plot(loc2[0], loc2[1],'ro')
-                ax[0,0].plot(loc2[1], loc2[0],'b^')
-                ax[0,0].set(title='Euclidean Distance (Heatmap)')
-
-                ax[0,1].imshow(som, cmap=plt.get_cmap('gnuplot'))
-                ax[0,1].set(title='Trained SOM')
-
-                im_ax02 = ax[0,2].imshow(src_img, cmap=plt.get_cmap('gnuplot'))
-                ax[0,2].set(title='Source Image')
-                divider = make_axes_locatable(ax[0,2])
-                cax0 = divider.append_axes('right', size='5%', pad=0.05)
-                fig.colorbar(im_ax02, cax=cax0, label='Intensity')
-
-                fig.tight_layout()
-                # plt.show() will block, but fig.show() wont
-                if save is None:
-                    plt.show()
-                else:
-                    plt.savefig(save)
-
-                plt.close(fig)
-
             return data
 
     def _apply_heatmap(self, binary, SOM):
