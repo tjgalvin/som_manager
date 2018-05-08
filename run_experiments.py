@@ -19,8 +19,7 @@ def FIRST_Fraction():
 
     PINK_OPTS = [{'som-width':3, 'som-height':3, 'num-iter':1},
                  {'som-width':7, 'som-height':7, 'num-iter':1},
-                 {'som-width':10, 'som-height':10, 'num-iter':1},
-                 {'som-width':13, 'som-height':13, 'num-iter':1}]
+                 {'som-width':10, 'som-height':10, 'num-iter':1}]
 
     # PINK_OPTS = [{'som-width':2, 'som-height':2, 'num-iter':1},
     #              {'som-width':3, 'som-height':3, 'num-iter':1}]
@@ -57,32 +56,41 @@ def FIRST_Fraction():
                     validate_binary=validate_bin) 
         pink.train()
         for i, t in enumerate(pink.binary):
-            pink.map(mode=i)   
-            pink.map(mode='validate', SOM_mode=i)   
-            
-            pink.show_som(channel=0, mode=i)
-            pink.show_som(channel=0, mode=i, plt_mode='split')
-            pink.show_som(channel=0, mode=i, plt_mode='grid')
-            pink.show_som(channel=1, mode=i)
-            pink.show_som(channel=1, mode=i, plt_mode='split')
-            pink.show_som(channel=1, mode=i, plt_mode='grid')
-            pink.attribute_heatmap(save=f'train_{i}_labels_dist.pdf', mode=i)
-            pink.attribute_heatmap(save=f'train_{i}_labels_dist.pdf', mode=i, realisations=1000)
-            
-            validation_res = pink.validator(SOM_mode=i)
+            try:
+                pink.map(mode=i)   
+                pink.map(mode='validate', SOM_mode=i)   
+                
+                pink.show_som(channel=0, mode=i)
+                pink.show_som(channel=0, mode=i, plt_mode='split')
+                pink.show_som(channel=0, mode=i, plt_mode='grid')
+                pink.show_som(channel=1, mode=i)
+                pink.show_som(channel=1, mode=i, plt_mode='split')
+                pink.show_som(channel=1, mode=i, plt_mode='grid')
+                pink.attribute_heatmap(save=f'train_{i}_labels_dist.pdf', mode=i)
+                pink.attribute_heatmap(save=f'train_{i}_labels_dist.pdf', mode=i, realisations=1000)
 
-            results.append(validation_res)
+                print(f'Count map for train {i}....')            
+                pink.count_map(mode=i, save=f'train_{i}_count_map.pdf')
+                print(f'Count map for validate with train {i}....')                        
+                pink.count_map(mode='validate', SOM_mode=i, save=f'validate_{i}_count_map.pdf')
 
-            pink.save('trained.pink')
+                validation_res = pink.validator(SOM_mode=i)
+
+                results.append(validation_res)
+
+                pink.save('trained.pink')
+
+            except Exception as e:
+                print('Try caught something')
+                print(e)
 
             plt.close('all')
 
             df = pd.DataFrame(results)
             df.to_json(f'{pink.project_dir}/FIRST_Results.json')
-        
-        
+              
 def FIRST_Segments():
-    PROJECT_DIR = 'Script_Experiments'
+    PROJECT_DIR = 'Script_Experiments_Segments'
     CHANNELS = [['FIRST'], ['FIRST', 'WISE_W1']]
     # CHANNELS = [['FIRST']]
     BINARY_OPTS = [{'segments':4, 'norm':False, 'log10': False, 'sigma':False, 'convex':False, 'project_dirs':'NoNorm_NoLog_NoSig'},
@@ -90,18 +98,9 @@ def FIRST_Segments():
                    {'segments':4, 'norm':True, 'log10': False, 'sigma':3., 'convex':False, 'project_dirs':f'Norm_NoLog_3'},
                    {'segments':4, 'norm':True, 'log10': [True, False], 'sigma':3., 'convex':True, 'project_dirs':f'Norm_Log_3'}]
 
-    # BINARY_OPTS = [{'segments':4, 'norm':True, 'log10': False, 'sigma':3., 'project_dir':f'Norm_NoLog_3'},
-    #                {'segments':4, 'norm':True, 'log10': True, 'sigma':3., 'project_dir':f'Norm_Log_3'}]
-
-
     PINK_OPTS = [{'som-width':3, 'som-height':3, 'num-iter':1},
                  {'som-width':7, 'som-height':7, 'num-iter':1},
-                 {'som-width':10, 'som-height':10, 'num-iter':1},
-                 {'som-width':13, 'som-height':13, 'num-iter':1}]
-
-    # PINK_OPTS = [{'som-width':2, 'som-height':2, 'num-iter':1},
-    #              {'som-width':3, 'som-height':3, 'num-iter':1}]
-
+                 {'som-width':10, 'som-height':10, 'num-iter':1}]
 
     rgz_dir = 'rgz_rcnn_data'
     cat = Catalog(rgz_dir=rgz_dir)
@@ -134,27 +133,32 @@ def FIRST_Segments():
                     validate_binary=validate_bin) 
         pink.train()
         for i, t in enumerate(pink.binary):
-            
-            pink.map(mode=i)   
-            pink.map(mode='validate', SOM_mode=i)   
-            
-            pink.show_som(channel=0, mode=i)
-            pink.show_som(channel=0, mode=i, plt_mode='split')
-            pink.show_som(channel=0, mode=i, plt_mode='grid')
-            pink.show_som(channel=1, mode=i)
-            pink.show_som(channel=1, mode=i, plt_mode='split')
-            pink.show_som(channel=1, mode=i, plt_mode='grid')
-            pink.attribute_heatmap(save=f'train_{i}_labels_dist.pdf', mode=i)
-            pink.attribute_heatmap(save=f'train_{i}_labels_dist.pdf', mode=i, realisations=1000)
-            
-            pink.count_map(mode=i, save=f'train_{i}_count_map.pdf')
-            pink.count_map(mode='validate', SOM_mode=i, save=f'validate_{i}_count_map.pdf')
+            try:
+                pink.map(mode=i)   
+                pink.map(mode='validate', SOM_mode=i)   
+                
+                pink.show_som(channel=0, mode=i)
+                pink.show_som(channel=0, mode=i, plt_mode='split')
+                pink.show_som(channel=0, mode=i, plt_mode='grid')
+                pink.show_som(channel=1, mode=i)
+                pink.show_som(channel=1, mode=i, plt_mode='split')
+                pink.show_som(channel=1, mode=i, plt_mode='grid')
+                pink.attribute_heatmap(save=f'train_{i}_labels_dist.pdf', mode=i)
+                pink.attribute_heatmap(save=f'train_{i}_labels_dist.pdf', mode=i, realisations=1000)
+                
+                print(f'Count map for train {i}....')                        
+                pink.count_map(mode=i, save=f'train_{i}_count_map.pdf')
+                print(f'Count map for validate with train {i}....')                        
+                pink.count_map(mode='validate', SOM_mode=i, save=f'validate_{i}_count_map.pdf')
 
-            validation_res = pink.validator(SOM_mode=i)
+                validation_res = pink.validator(SOM_mode=i)
 
-            results.append(validation_res)
+                results.append(validation_res)
 
-            pink.save('trained.pink')
+                pink.save('trained.pink')
+            except Exception as e:
+                print('Try pass captured something')
+                print(e)
 
             plt.close('all')
 
@@ -162,5 +166,12 @@ def FIRST_Segments():
             df.to_json(f'{pink.project_dir}/FIRST_Results.json')
 
 if __name__ == '__main__':
-    FIRST_Fraction()
-    # FIRST_Segments()
+    import socket
+    hostname = socket.gethostname()
+
+    if 'bd-client-01' in hostname:
+        FIRST_Fraction()
+    elif 'bd-client-02' in hostname:
+        FIRST_Segments()
+    else:
+        print('No matching hostname...')
