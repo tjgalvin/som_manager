@@ -4,22 +4,22 @@ from itertools import product
 import matplotlib.pyplot as plt
 
 
-def FIRST_Fraction():
+def FIRST_Fraction(CHANNELS=[['FIRST']]):
     PROJECT_DIR = 'Script_Experiments_Fraction'
-    CHANNELS = [['FIRST'], ['FIRST', 'WISE_W1']]
+    # CHANNELS = [['FIRST'], ['FIRST', 'WISE_W1']]
     # CHANNELS = [['FIRST']]
     BINARY_OPTS = [{'fraction':0.7, 'norm':False, 'log10': False, 'sigma':False, 'convex':False, 'project_dir':'NoNorm_NoLog_NoSig'},
                    {'fraction':0.7, 'norm':True, 'log10': False, 'sigma':False, 'convex':False, 'project_dir':f'Norm_NoLog_NoSig'},
                    {'fraction':0.7, 'norm':True, 'log10': False, 'sigma':3., 'convex':False, 'project_dir':f'Norm_NoLog_3'},
-                   {'fraction':0.7, 'norm':True, 'log10': [True, False], 'sigma':3., 'convex':True, 'project_dir':f'Norm_Log_3'}]
+                   {'fraction':0.7, 'norm':True, 'log10': [True, False], 'sigma':3., 'convex':True, 'project_dir':f'Norm_Log_3_Convex'}]
 
     # BINARY_OPTS = [{'fraction':0.8, 'norm':True, 'log10': False, 'sigma':3., 'project_dir':f'Norm_NoLog_3'},
     #                {'fraction':0.8, 'norm':True, 'log10': True, 'sigma':3., 'project_dir':f'Norm_Log_3'}]
 
 
-    PINK_OPTS = [{'som-width':3, 'som-height':3, 'num-iter':1},
-                 {'som-width':7, 'som-height':7, 'num-iter':1},
-                 {'som-width':10, 'som-height':10, 'num-iter':1}]
+    PINK_OPTS = [{'som-width':3, 'som-height':3, 'num-iter':4},
+                 {'som-width':7, 'som-height':7, 'num-iter':4},
+                 {'som-width':10, 'som-height':10, 'num-iter':4}]
 
     # PINK_OPTS = [{'som-width':2, 'som-height':2, 'num-iter':1},
     #              {'som-width':3, 'som-height':3, 'num-iter':1}]
@@ -89,18 +89,18 @@ def FIRST_Fraction():
             df = pd.DataFrame(results)
             df.to_json(f'{pink.project_dir}/FIRST_Results.json')
               
-def FIRST_Segments():
+def FIRST_Segments(CHANNELS=[['FIRST']]):
     PROJECT_DIR = 'Script_Experiments_Segments'
-    CHANNELS = [['FIRST'], ['FIRST', 'WISE_W1']]
+    # CHANNELS = [['FIRST'], ['FIRST', 'WISE_W1']]
     # CHANNELS = [['FIRST']]
     BINARY_OPTS = [{'segments':4, 'norm':False, 'log10': False, 'sigma':False, 'convex':False, 'project_dirs':'NoNorm_NoLog_NoSig'},
                    {'segments':4, 'norm':True, 'log10': False, 'sigma':False,'convex':False,  'project_dirs':f'Norm_NoLog_NoSig'},
                    {'segments':4, 'norm':True, 'log10': False, 'sigma':3., 'convex':False, 'project_dirs':f'Norm_NoLog_3'},
-                   {'segments':4, 'norm':True, 'log10': [True, False], 'sigma':3., 'convex':True, 'project_dirs':f'Norm_Log_3'}]
+                   {'segments':4, 'norm':True, 'log10': [True, False], 'sigma':3., 'convex':True, 'project_dirs':f'Norm_Log_3_Convex'}]
 
-    PINK_OPTS = [{'som-width':3, 'som-height':3, 'num-iter':1},
-                 {'som-width':7, 'som-height':7, 'num-iter':1},
-                 {'som-width':10, 'som-height':10, 'num-iter':1}]
+    PINK_OPTS = [{'som-width':3, 'som-height':3, 'num-iter':4},
+                 {'som-width':7, 'som-height':7, 'num-iter':4},
+                 {'som-width':10, 'som-height':10, 'num-iter':4}]
 
     rgz_dir = 'rgz_rcnn_data'
     cat = Catalog(rgz_dir=rgz_dir)
@@ -173,5 +173,9 @@ if __name__ == '__main__':
         FIRST_Fraction()
     elif 'bd-client-02' in hostname:
         FIRST_Segments()
+    if 'bd-client-03' in hostname:
+        FIRST_Fraction(CHANNELS=[['FIRST','WISE_W1']])
+    elif 'bd-client-04' in hostname:
+        FIRST_Segments(CHANNELS=[['FIRST','WISE_W1']])
     else:
         print('No matching hostname...')

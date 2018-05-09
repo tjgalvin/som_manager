@@ -1213,7 +1213,8 @@ class Pink(Base):
         else:
             plt.savefig(save)
 
-    def _label_plot(self, book, shape, save=None, xtick_rotation=None, color_map='gnuplot2', title=None):
+    def _label_plot(self, book, shape, save=None, xtick_rotation=None, 
+                    color_map='gnuplot2', title=None, weights=None):
         '''Isolated function to plot the attribute histogram if the data is labelled in 
         nature
 
@@ -1231,6 +1232,10 @@ class Pink(Base):
             The name of the matplotlib.colormap that will be passed directly to matplotlib.pyplot.get_map()
         title - None of str
             A simple title strng passed to fig.suptitle()
+        weights - None or dict
+            If not None, the dict will have keys corresponding to the labels, and contain the total
+            set of counts from the Binary file/book object. This will be used to `weigh` the contribution
+            per neuron, to instead be a fraction of dataset type of statistic. 
         '''
         save = self._path_build(save)
 
@@ -1265,7 +1270,9 @@ class Pink(Base):
         # Set empty axis labels for everything
         for a in ax.flatten():
             a.set(xticklabels=[], yticklabels=[])
-            
+
+        # Keep track of range for the color bar normalisation
+        norm_max = 0  
         for k, v in book.items():
             v = [i for items in v for i in items]
             c = Counter(v)
@@ -1273,11 +1280,23 @@ class Pink(Base):
 
             # Guard agaisnt most similar empty neuron
             if s > 0:
+                # If we have weights, use them to weight the value of the labels
+                # otherwise just weight by the sum of items in the neuron
+                if weights is not None:
+                    values = [c[l]/weights[l] for l in unique_labels]
+                    norm_max = max(values) if max(values) > norm_max else norm_max
+
+                    color = cmap(values)
+                else:
+                    norm_max = 1
+                    color = cmap([c[l]/s for l in unique_labels])
+
                 ax[k].bar(np.arange(len(unique_labels)),
                          [1]*len(unique_labels),
-                         color=cmap([c[l]/s for l in unique_labels]),
+                         color=color,
                          align='center',
                          tick_label=unique_labels)
+
             ax[k].set(ylim=[0,1])
             if k[1] != -1: # disable this for now.
                 ax[k].set(yticklabels=[])
@@ -1289,8 +1308,18 @@ class Pink(Base):
 
         fig.subplots_adjust(right=0.83)
         cax = fig.add_axes([0.85, 0.10, 0.03, 0.8])
+
+        # Need to calculate the values, then create the color map with the
+        # attached norm object, then plot, then this will work correctly. 
+
+        # norm = mpl.colors.Normalize(vmin=0, vmax=norm_max)        
         cb1 = mpl.colorbar.ColorbarBase(cax, cmap=cmap, norm=norm)
-        cb1.set_label('Fraction Contributed per Neuron')
+
+        if weights is None:
+            cb1.set_label('Fraction Contributed per Neuron')
+        else:
+            cb1.set_label('Fraction of Dataset')
+            
 
         if title is not None:
             fig.suptitle(title)
@@ -1324,7 +1353,7 @@ class Pink(Base):
             self._label_plot(book, shape, **kwargs)
             
     def attribute_heatmap(self, realisations=1, mode='train', label=None, plot=True, 
-                                func=None, *args, **kwargs):
+                                func=None, SOM_mode=None, weights=False, *args, **kwargs):
         '''Based on the most likely grid/best match in the heatmap for each source
         build up a distibution plot of each some label/parameters
 
@@ -1339,7 +1368,24 @@ class Pink(Base):
              Plot the attribute heatmap/distribution
         func - Function or callable
              Function that may be applied to each of the instances of Source
+        global_normalise - bool
+             Produce counts of each label across the entire dataset, idea being
+             that they are than used to `weight` the counts after the fact. For
+             instance, the `1_1` label is more common, so should be downweighted
+        SOM_mode - str or int
+             The mode keyword that will be used to select the SOOM to distribute the 
+             labels with. If mode is `train` or an int (which is a training segement) then
+             there will be a single SOM_path in the src_heatmap[] attribute. Otherwise, if
+             `mode` is `validate`, then there can be multiple SOM_paths as keys in the src_heatmap[]
+             attribute
+        weights - bool
+             Use the global counts of the labels from the `book` object as a weigh when plotting. 
+             TODO: Think about weighing the book object directly. I dont think this is the way to
+             do it at this point
         '''
+        if SOM_mode is not None:
+            raise NotImplemented('SOM_mode is not implemented in attribute_heatmap')
+
         binary = self._reterive_binary(mode)
 
         if binary is None:
@@ -1348,22 +1394,25 @@ class Pink(Base):
         if func is None:
             func = self._source_rgz
 
+        print(binary.SOM_path)
         heatmaps = binary.src_heatmap[binary.SOM_path]
         shape = heatmaps[0].shape
         items = binary.get_data(label=label, func=func)
 
         book = defaultdict(list)
+        global_counts = defaultdict(int)
         if realisations == 1:
             for heat, item in zip(heatmaps, items):
                 loc = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
                 book[loc].append(item)
-        else:
-            # print('Starting realisations')
-            pixels = range(np.prod(shape))
-            for heat, item in zip(heatmaps, items):
-                loc_d = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
-                counter = defaultdict(int)
                 
+                # This is dangerous. Item HAS to be a list. Be aware that this could
+                # be a problem later
+                for i in item:
+                    global_counts[i] += 1
+        else:
+            pixels = range(np.prod(shape))
+            for heat, item in zip(heatmaps, items):                
                 prob = 1. / heat**10.
                 prob = prob / prob.sum()
                 rand_pos = np.random.choice(pixels, size=realisations, p=prob.flatten())
@@ -1372,16 +1421,23 @@ class Pink(Base):
                 locs = [(x,y) for x,y in zip(xd, yd)]
                 for loc in locs:
                     book[loc].append(item)
-                    counter[loc] += 1
+                    # This is dangerous. Item HAS to be a list. Be aware that this could
+                    # be a problem later
+                    for i in item:
+                        global_counts[i] += 1
 
         if plot:
             if realisations == 1:
                 title = 'No realisations'
             else:
                 title = f'{realisations} realisations Performed'
-            self.attribute_plot(book, shape, title=title, **kwargs)
-
-        return book
+            if weights:
+                title = f'{title} with weights'
+                self.attribute_plot(book, shape, title=title, weights=global_counts, **kwargs)
+            else:
+                self.attribute_plot(book, shape, title=title, **kwargs)
+                
+        return book, global_counts
 
     def count_map(self, mode='train', SOM_mode= None, plot=False, save=None, color_map='bwr'):
         '''Produce a map of the number of images that best match each neuron. This
@@ -1468,7 +1524,8 @@ class Pink(Base):
                 a = [a]
             return [ i['name'] for i in a ]
 
-    def validator(self, mode='validate', SOM_mode='train' , realisations=1, func=None, pack=True):
+    def validator(self, mode='validate', SOM_mode='train' , realisations=1, func=None, pack=True,
+                  weights=False):
         '''The code to check the validate data agaisnt the training data. Use the distribution
         of labels from some neuron from the training data to predict the label of the source
         from the validate set
@@ -1487,6 +1544,9 @@ class Pink(Base):
         pack - bool
              Back the answer dict object with the number of realisations, the preprocessor arguments
              and the Pink specific arguments
+        weights - bool
+             Use the counts of a label across the entire dataset as a weight when calculating
+             the distribution of labels on a per neuron basis
         '''
         from collections import Counter
 
@@ -1502,7 +1562,7 @@ class Pink(Base):
         if func is None:
             func = self._source_rgz
 
-        book = self.attribute_heatmap(func=func, mode=SOM_mode, realisations=realisations, plot=False)
+        book, label_counts = self.attribute_heatmap(func=func, mode=SOM_mode, realisations=realisations, plot=False)
         answer_book = defaultdict( lambda : {'correct':0,'wrong':0, 'accuracy':0} )
 
         # For speed, loop through the entire `book` object once now and flatten the items
@@ -1522,7 +1582,10 @@ class Pink(Base):
                 # v = [i for items in book[loc] for i in items]
                 v = book[loc]
                 c = Counter(v)
-                arr = np.array([i for i in c.values()])
+                if weights:
+                    arr = np.array([c[i]/label_counts[i] for i in c.keys()])
+                else:
+                    arr = np.array([c[i] for i in c.keys()])
                 items = [i for i in c.keys()]
 
                 # Given the distribution of answers for that Neuron, make the guess.
@@ -1545,6 +1608,7 @@ class Pink(Base):
         flattened_book = {f'{k}_{k2}': v2 for k, v in answer_book.items() for k2, v2 in v.items()}
 
         if pack:
+            flattened_book['weighted'] = weights
             flattened_book['empty_neuron_attempts'] = empty
             flattened_book['train_src_hash'] = train.binary_hash
             flattened_book['train_SOM_hash'] = train.SOM_hash
@@ -1602,8 +1666,7 @@ if __name__ == '__main__':
             pink.map(mode='validate', apply=True)
 
             pink.save('TEST8.pink')
-
-            
+         
         elif '-t' == i:                    
             for pink_file, out_name in COLLECTION:
 
@@ -1707,10 +1770,56 @@ if __name__ == '__main__':
         
             df = pd.DataFrame(results)
             print(df)
+        
+        elif '-g' == i:
+            rgz_dir = 'rgz_rcnn_data'
+            PROJECTS_DIR = 'Test_Experiments'
+            FRACTION = 0.8
+
+            LOAD_PINK  = f'{PROJECTS_DIR}/FIRST_Norm_Log_3_NoSigWise/Test.pink'
+            if not os.path.exists(LOAD_PINK):
+                cat = Catalog(rgz_dir=rgz_dir)
+
+                # Commenting out to let me ctrl+C without killing things
+                # cat.save_sources()
+
+                print('\nValidating sources...')
+                cat.collect_valid_sources()
+
+                bins = cat.dump_binary('TEST.binary', norm=True, sigma=[3., False], 
+                                            log10=[True, False], convex=False,
+                                            channels=['FIRST'],
+                                            project_dir=f'{PROJECTS_DIR}/FIRST_Norm_Log_3_NoSigWise',
+                                            fraction=FRACTION)    
+
+                train_bin, validate_bin = bins
+                print(train_bin)
+                print(validate_bin)
+
+                pink = Pink(train_bin, pink_args={'som-width':4,
+                                                'som-height':4,
+                                                'num-iter':1},
+                            validate_binary=validate_bin) 
+
+                pink.train()
+                pink.map()
+                pink.map(mode='validate', SOM_mode='train')
+                pink.save('Test.pink')
+            else:
+                pink = Pink.loader(LOAD_PINK)
+
+            pink.attribute_heatmap(plot=True, xtick_rotation=90, color_map='gnuplot',
+                                   save='No_weights.png')
+            pink.attribute_heatmap(plot=True, xtick_rotation=90, color_map='gnuplot', 
+                                   weights=True, save='With_weights.png')
+            print(pink.validator())
+            print(pink.validator(weights=True))
+
         else:
             print('Options:')
             print(' -r : Run test code to scan in RGZ image data')
             print(' -t : Run test code for the Transform outputs and heatmap')
             print(' -v : Run test code for Validator')
             print(' -c : Run test code for cross-validation')
+            print(' -g : Run test code for the global counts weighting for attribute processing/plotting')
             sys.exit(0)
