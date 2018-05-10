@@ -1,8 +1,11 @@
-import pandas as pd
-from catalog import Source, Binary, Catalog, Pink
-from itertools import product
-import matplotlib.pyplot as plt
+import matplotlib as mpl
+mpl.use('agg')
 
+import os
+import pandas as pd
+import matplotlib.pyplot as plt
+from itertools import product
+from catalog import Source, Binary, Catalog, Pink
 
 def FIRST_Fraction(CHANNELS=[['FIRST']]):
     PROJECT_DIR = 'Script_Experiments_Fraction'
@@ -42,19 +45,24 @@ def FIRST_Fraction(CHANNELS=[['FIRST']]):
         chan_name = '_'.join(channels)
         out_dir = f"{PROJECT_DIR}/{chan_name}_{bin_opts['project_dir']}_{pink_opts['som-width']}x{pink_opts['som-height']}"
 
-        # This is painful, but since product() is returning a reference to a dict, we cant
-        # edit the project_dir in place to build up the folder name, as this gets carried
-        # through to later iterations. Hence, we can't **bin_opts below
-        bins = cat.dump_binary('source.binary', channels=channels, project_dir=out_dir,
-                               norm=bin_opts['norm'], sigma=bin_opts['sigma'], log10=bin_opts['log10'],
-                               convex=bin_opts['convex'], fraction=bin_opts['fraction'])
+        if not os.path.exists(f'{out_dir}/trained.pink'):
+            # This is painful, but since product() is returning a reference to a dict, we cant
+            # edit the project_dir in place to build up the folder name, as this gets carried
+            # through to later iterations. Hence, we can't **bin_opts below
+            bins = cat.dump_binary('source.binary', channels=channels, project_dir=out_dir,
+                                norm=bin_opts['norm'], sigma=bin_opts['sigma'], log10=bin_opts['log10'],
+                                convex=bin_opts['convex'], fraction=bin_opts['fraction'])
 
-        train_bin, validate_bin = bins
-        
-        pink = Pink(train_bin, 
-                    pink_args=pink_opts,
-                    validate_binary=validate_bin) 
-        pink.train()
+            train_bin, validate_bin = bins
+            
+            pink = Pink(train_bin, 
+                        pink_args=pink_opts,
+                        validate_binary=validate_bin) 
+            pink.train()
+        else:
+            print('Loading in saved Pink instance')
+            pink = Pink.loader(f'{out_dir}/trained.pink')
+
         for i, t in enumerate(pink.binary):
             try:
                 pink.map(mode=i)   

@@ -2,6 +2,9 @@
 and numpy objects, creating binary files, training/mapping PINK and producing
 results
 '''
+import matplotlib as mpl
+mpl.use('agg')
+
 import io
 import os
 import sys
@@ -1058,6 +1061,85 @@ class Pink(Base):
             fig.tight_layout()
             fig.savefig(f'{binary.SOM_path}-grid.pdf')
 
+    def src_heatmap_plot(self, index=0, mode='train', SOM_mode=None, color_map='bwr'):
+        '''Simple function to produce a image of the source passed to PINK, and a 
+        corresponding map showing its distance from the neurons
+
+        index - int
+             The index of the source to plot
+        mode - `train`, `validate` or int
+             Mode passed to self._reterive_binary()
+        SOM_mode - `train`, `validate` or int
+             The name of the binary containing the SOM which the sources have been
+             mapped agaisnt
+        '''
+        from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+        save = self._path_build('TEST.png')
+
+        binary = self._reterive_binary(mode)
+        if SOM_mode is None:
+            SOM_path = binary.SOM_path
+        else:
+            SOM_binary = self._reterive_binary(SOM_mode)
+            SOM_path = SOM_binary.SOM_path
+
+        src_img_ch0 = binary.get_image(index=index, channel=0)
+        src_img_ch1 = binary.get_image(index=index, channel=1)
+
+        fig = plt.figure(figsize=(5,5))
+
+        ax0 = plt.subplot2grid((2,2), (0,0))
+        im = ax0.imshow(src_img_ch0, cmap=plt.get_cmap(color_map))
+        ax0.set(title=binary.channels[0])
+        ax0.get_xaxis().set_ticks([])
+        ax0.get_yaxis().set_ticks([])
+
+        divider = make_axes_locatable(ax0)
+        cax0 = divider.append_axes('left', size='5%', pad=0.05)
+        fig.colorbar(im, cax=cax0, label='Intensity')
+        cax0.yaxis.set_ticks_position('left')
+        cax0.yaxis.set_label_position('left')
+
+        if src_img_ch1 is not None:
+            ax1 = plt.subplot2grid((2,2), (0,1))
+            im = ax1.imshow(src_img_ch1, cmap=plt.get_cmap(color_map))
+            ax1.set(title=binary.channels[1])
+            ax1.get_xaxis().set_ticks([])
+            ax1.get_yaxis().set_ticks([])
+
+            divider = make_axes_locatable(ax1)
+            cax1 = divider.append_axes('right', size='5%', pad=0.05)
+            fig.colorbar(im, cax=cax1, label='Intensity')
+        
+        heatmap = binary.src_heatmap[SOM_path][index]
+        ax2 = plt.subplot2grid((2,2), (1,0))
+        im = ax2.imshow(heatmap)
+        ax2.get_xaxis().set_ticks([])
+        ax2.get_yaxis().set_ticks([])
+        
+        divider = make_axes_locatable(ax2)
+        cax2 = divider.append_axes('left', size='5%', pad=0.05)
+        fig.colorbar(im, cax=cax2, label='Euclidean Distance')
+        cax2.yaxis.set_ticks_position('left')
+        cax2.yaxis.set_label_position('left')
+
+
+        ax3 = plt.subplot2grid((2,2), (1,1))
+        prob = 1. / heatmap**10
+        prob = prob / prob.sum()
+
+        im = ax3.imshow(prob)
+        ax3.get_xaxis().set_ticks([])
+        ax3.get_yaxis().set_ticks([])
+        
+        divider = make_axes_locatable(ax3)
+        cax3 = divider.append_axes('right', size='5%', pad=0.05)
+        fig.colorbar(im, cax=cax3, label='Likelihood')
+
+        fig.tight_layout(h_pad=0.1, w_pad=0.1)
+        plt.savefig(save)
+
     def _process_heatmap(self, heat_key, image_number=0, plot=False, channel=0, binary=None, save=None):
         '''Function to process the heatmap file produced by the `--map`
         option in the Pink utility
@@ -1776,7 +1858,7 @@ if __name__ == '__main__':
             PROJECTS_DIR = 'Test_Experiments'
             FRACTION = 0.8
 
-            LOAD_PINK  = f'{PROJECTS_DIR}/FIRST_Norm_Log_3_NoSigWise/Test.pink'
+            LOAD_PINK  = f'{PROJECTS_DIR}/FIRST_WISE_W1_Norm_Log_3_NoSigWise/Test.pink'
             if not os.path.exists(LOAD_PINK):
                 cat = Catalog(rgz_dir=rgz_dir)
 
@@ -1788,17 +1870,17 @@ if __name__ == '__main__':
 
                 bins = cat.dump_binary('TEST.binary', norm=True, sigma=[3., False], 
                                             log10=[True, False], convex=False,
-                                            channels=['FIRST'],
-                                            project_dir=f'{PROJECTS_DIR}/FIRST_Norm_Log_3_NoSigWise',
+                                            channels=['FIRST', 'WISE_W1'],
+                                            project_dir=f'{PROJECTS_DIR}/FIRST_WISE_W1_Norm_Log_3_NoSigWise',
                                             fraction=FRACTION)    
 
                 train_bin, validate_bin = bins
                 print(train_bin)
                 print(validate_bin)
 
-                pink = Pink(train_bin, pink_args={'som-width':4,
-                                                'som-height':4,
-                                                'num-iter':1},
+                pink = Pink(train_bin, pink_args={'som-width':7,
+                                                'som-height':7,
+                                                'num-iter':5},
                             validate_binary=validate_bin) 
 
                 pink.train()
@@ -1808,12 +1890,21 @@ if __name__ == '__main__':
             else:
                 pink = Pink.loader(LOAD_PINK)
 
-            pink.attribute_heatmap(plot=True, xtick_rotation=90, color_map='gnuplot',
-                                   save='No_weights.png')
-            pink.attribute_heatmap(plot=True, xtick_rotation=90, color_map='gnuplot', 
-                                   weights=True, save='With_weights.png')
-            print(pink.validator())
-            print(pink.validator(weights=True))
+            pink.src_heatmap_plot(index=750)
+
+            pink.show_som(channel=0, mode=0)
+            # pink.show_som(channel=0, mode=0, plt_mode='split')
+            # pink.show_som(channel=0, mode=0, plt_mode='grid')
+            # pink.show_som(channel=1, mode=0)
+            # pink.show_som(channel=1, mode=0, plt_mode='split')
+            # pink.show_som(channel=1, mode=0, plt_mode='grid')
+
+            # pink.attribute_heatmap(plot=True, xtick_rotation=90, color_map='gnuplot',
+            #                        save='No_weights.png')
+            # pink.attribute_heatmap(plot=True, xtick_rotation=90, color_map='gnuplot', 
+            #                        weights=True, save='With_weights.png')
+            # print(pink.validator())
+            # print(pink.validator(weights=True))
 
         else:
             print('Options:')
