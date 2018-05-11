@@ -7,19 +7,20 @@ import matplotlib.pyplot as plt
 from itertools import product
 from catalog import Source, Binary, Catalog, Pink
 
-def FIRST_Fraction(CHANNELS=[['FIRST']]):
-    PROJECT_DIR = 'Script_Experiments_Fraction'
+def FIRST_Fraction(CHANNELS=[['FIRST']],
+                   PROJECT_DIR = 'Script_Experiments_Fraction',
+                   TRIAL=0):
     REALISATIONS = 1000
     BINARY_OPTS = [{'fraction':0.7, 'norm':False, 'log10': False, 'sigma':False, 'convex':False, 'project_dir':'NoNorm_NoLog_NoSig'},
                    {'fraction':0.7, 'norm':True, 'log10': False, 'sigma':False, 'convex':False, 'project_dir':f'Norm_NoLog_NoSig'},
                    {'fraction':0.7, 'norm':True, 'log10': False, 'sigma':3., 'convex':False, 'project_dir':f'Norm_NoLog_3'},
                    {'fraction':0.7, 'norm':True, 'log10': [True, False], 'sigma':3., 'convex':True, 'project_dir':f'Norm_Log_3_Convex'}]
 
-    PINK_OPTS = [{'som-width':3, 'som-height':3, 'num-iter':4},
-                 {'som-width':7, 'som-height':7, 'num-iter':4},
-                 {'som-width':10, 'som-height':10, 'num-iter':4},
-                 {'som-width':13, 'som-height':13, 'num-iter':4},
-                 {'som-width':16, 'som-height':16, 'num-iter':4}]
+    PINK_OPTS = [{'som-width':3, 'som-height':3, 'num-iter':10},
+                 {'som-width':7, 'som-height':7, 'num-iter':10},
+                 {'som-width':10, 'som-height':10, 'num-iter':10},
+                 {'som-width':13, 'som-height':13, 'num-iter':10},
+                 {'som-width':16, 'som-height':16, 'num-iter':10}]
 
     rgz_dir = 'rgz_rcnn_data'
     cat = Catalog(rgz_dir=rgz_dir)
@@ -38,7 +39,7 @@ def FIRST_Fraction(CHANNELS=[['FIRST']]):
             continue
 
         chan_name = '_'.join(channels)
-        out_dir = f"{PROJECT_DIR}/{chan_name}_{bin_opts['project_dir']}_{pink_opts['som-width']}x{pink_opts['som-height']}"
+        out_dir = f"{PROJECT_DIR}/{chan_name}_{bin_opts['project_dir']}_{pink_opts['som-width']}x{pink_opts['som-height']}_Trial{TRIAL}"
 
         if not os.path.exists(f'{out_dir}/trained.pink'):
             # This is painful, but since product() is returning a reference to a dict, we cant
@@ -94,8 +95,9 @@ def FIRST_Fraction(CHANNELS=[['FIRST']]):
             df = pd.DataFrame(results)
             df.to_json(f'{pink.project_dir}/FIRST_Results.json')
               
-def FIRST_Segments(CHANNELS=[['FIRST']]):
-    PROJECT_DIR = 'Script_Experiments_Segments'
+def FIRST_Segments(CHANNELS=[['FIRST']],
+                   PROJECT_DIR = 'Script_Experiments_Segments',
+                   TRIAL=0):
     REALISATIONS = 1000
 
     BINARY_OPTS = [{'segments':4, 'norm':False, 'log10': False, 'sigma':False, 'convex':False, 'project_dirs':'NoNorm_NoLog_NoSig'},
@@ -103,11 +105,11 @@ def FIRST_Segments(CHANNELS=[['FIRST']]):
                    {'segments':4, 'norm':True, 'log10': False, 'sigma':3., 'convex':False, 'project_dirs':f'Norm_NoLog_3'},
                    {'segments':4, 'norm':True, 'log10': [True, False], 'sigma':3., 'convex':True, 'project_dirs':f'Norm_Log_3_Convex'}]
 
-    PINK_OPTS = [{'som-width':3, 'som-height':3, 'num-iter':4},
-                 {'som-width':7, 'som-height':7, 'num-iter':4},
-                 {'som-width':10, 'som-height':10, 'num-iter':4},
-                 {'som-width':13, 'som-height':13, 'num-iter':4},
-                 {'som-width':16, 'som-height':16, 'num-iter':4}]
+    PINK_OPTS = [{'som-width':3, 'som-height':3, 'num-iter':10},
+                 {'som-width':7, 'som-height':7, 'num-iter':10},
+                 {'som-width':10, 'som-height':10, 'num-iter':10},
+                 {'som-width':13, 'som-height':13, 'num-iter':10},
+                 {'som-width':16, 'som-height':16, 'num-iter':10}]
 
     rgz_dir = 'rgz_rcnn_data'
     cat = Catalog(rgz_dir=rgz_dir)
@@ -126,7 +128,7 @@ def FIRST_Segments(CHANNELS=[['FIRST']]):
             continue
 
         chan_name = '_'.join(channels)
-        out_dir = f"{PROJECT_DIR}/{chan_name}_{bin_opts['project_dirs']}_{pink_opts['som-width']}x{pink_opts['som-height']}"
+        out_dir = f"{PROJECT_DIR}/{chan_name}_{bin_opts['project_dirs']}_{pink_opts['som-width']}x{pink_opts['som-height']}_Trial{TRIAL}"
 
         if not os.path.exists(f'{out_dir}/trained.pink'):
 
@@ -185,13 +187,47 @@ if __name__ == '__main__':
     import socket
     hostname = socket.gethostname()
 
+    batch1 = [i for i in range(0,5)]
+    batch2 = [i for i in range(5,10)]
+
+    SEGS_DIR = 'Script_Experiments_Segments_Trials'
+    FRAC_DIR = 'Script_Experiments_Fractions_Trials'
+    
+    # ----------------------------------------------------------
     if 'bd-client-01' in hostname:
-        FIRST_Segments()
+        for i in batch1:
+            FIRST_Segments(TRIAL=i, PROJECT_DIR=SEGS_DIR)
+
+        for i in batch2:
+            FIRST_Fraction(CHANNELS=[['FIRST','WISE_W1']],
+                           TRIAL=i, PROJECT_DIR=FRAC_DIR)
+
+    # ----------------------------------------------------------
     elif 'bd-client-02' in hostname:
-        FIRST_Fraction()
+        for i in batch1:
+            FIRST_Fraction(TRIAL=i, PROJECT_DIR=FRAC_DIR)
+
+        for i in batch2:
+            FIRST_Segments(CHANNELS=[['FIRST','WISE_W1']],
+                           TRIAL=i, PROJECT_DIR=SEGS_DIR)
+    
+    # ----------------------------------------------------------
     elif 'bd-client-03' in hostname:
-        FIRST_Fraction(CHANNELS=[['FIRST','WISE_W1']])
+        for i in batch1:
+            FIRST_Fraction(CHANNELS=[['FIRST','WISE_W1']],
+                           TRIAL=i, PROJECT_DIR=FRAC_DIR)
+
+        for i in batch2:
+            FIRST_Segments(TRIAL=i, PROJECT_DIR=SEGS_DIR)
+
+    # ----------------------------------------------------------
     elif 'bd-client-04' in hostname:
-        FIRST_Segments(CHANNELS=[['FIRST','WISE_W1']])
+        for i in batch1:
+            FIRST_Segments(CHANNELS=[['FIRST','WISE_W1']],
+                           TRIAL=i, PROJECT_DIR=SEGS_DIR)
+
+        for i in batch2:
+            FIRST_Fraction(TRIAL=i, PROJECT_DIR=FRAC_DIR)
+            
     else:
         print('No matching hostname...')
