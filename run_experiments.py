@@ -9,6 +9,7 @@ from catalog import Source, Binary, Catalog, Pink
 
 def FIRST_Fraction(CHANNELS=[['FIRST']]):
     PROJECT_DIR = 'Script_Experiments_Fraction'
+    REALISATIONS = 1000
     BINARY_OPTS = [{'fraction':0.7, 'norm':False, 'log10': False, 'sigma':False, 'convex':False, 'project_dir':'NoNorm_NoLog_NoSig'},
                    {'fraction':0.7, 'norm':True, 'log10': False, 'sigma':False, 'convex':False, 'project_dir':f'Norm_NoLog_NoSig'},
                    {'fraction':0.7, 'norm':True, 'log10': False, 'sigma':3., 'convex':False, 'project_dir':f'Norm_NoLog_3'},
@@ -62,6 +63,8 @@ def FIRST_Fraction(CHANNELS=[['FIRST']]):
                 pink.map(mode=i)   
                 pink.map(mode='validate', SOM_mode=i)   
                 
+                pink.save('trained.pink')
+
                 pink.show_som(channel=0, mode=i)
                 pink.show_som(channel=0, mode=i, plt_mode='split')
                 pink.show_som(channel=0, mode=i, plt_mode='grid')
@@ -69,18 +72,15 @@ def FIRST_Fraction(CHANNELS=[['FIRST']]):
                 pink.show_som(channel=1, mode=i, plt_mode='split')
                 pink.show_som(channel=1, mode=i, plt_mode='grid')
                 pink.attribute_heatmap(save=f'train_{i}_labels_dist.pdf', mode=i)
-                pink.attribute_heatmap(save=f'train_{i}_labels_dist.pdf', mode=i, realisations=1000)
+                pink.attribute_heatmap(save=f'train_{i}_MC{REALISATIONS}_labels_dist.pdf', mode=i, realisations=REALISATIONS)
 
-                print(f'Count map for train {i}....')            
                 pink.count_map(mode=i, save=f'train_{i}_count_map.pdf')
-                print(f'Count map for validate with train {i}....')                        
                 pink.count_map(mode='validate', SOM_mode=i, save=f'validate_{i}_count_map.pdf')
 
                 validation_res = pink.validator(SOM_mode=i)
 
                 results.append(validation_res)
 
-                pink.save('trained.pink')
 
             except Exception as e:
                 print('Try caught something')
@@ -96,6 +96,7 @@ def FIRST_Fraction(CHANNELS=[['FIRST']]):
               
 def FIRST_Segments(CHANNELS=[['FIRST']]):
     PROJECT_DIR = 'Script_Experiments_Segments'
+    REALISATIONS = 1000
 
     BINARY_OPTS = [{'segments':4, 'norm':False, 'log10': False, 'sigma':False, 'convex':False, 'project_dirs':'NoNorm_NoLog_NoSig'},
                    {'segments':4, 'norm':True, 'log10': False, 'sigma':False,'convex':False,  'project_dirs':f'Norm_NoLog_NoSig'},
@@ -150,6 +151,8 @@ def FIRST_Segments(CHANNELS=[['FIRST']]):
                 pink.map(mode=i)   
                 pink.map(mode='validate', SOM_mode=i)   
                 
+                pink.save('trained.pink')
+                
                 pink.show_som(channel=0, mode=i)
                 pink.show_som(channel=0, mode=i, plt_mode='split')
                 pink.show_som(channel=0, mode=i, plt_mode='grid')
@@ -157,21 +160,21 @@ def FIRST_Segments(CHANNELS=[['FIRST']]):
                 pink.show_som(channel=1, mode=i, plt_mode='split')
                 pink.show_som(channel=1, mode=i, plt_mode='grid')
                 pink.attribute_heatmap(save=f'train_{i}_labels_dist.pdf', mode=i)
-                pink.attribute_heatmap(save=f'train_{i}_labels_dist.pdf', mode=i, realisations=1000)
+                pink.attribute_heatmap(save=f'train_{i}_MC{REALISATIONS}_labels_dist.pdf', mode=i, realisations=REALISATIONS)
                 
-                print(f'Count map for train {i}....')                        
                 pink.count_map(mode=i, save=f'train_{i}_count_map.pdf')
-                print(f'Count map for validate with train {i}....')                        
                 pink.count_map(mode='validate', SOM_mode=i, save=f'validate_{i}_count_map.pdf')
 
                 validation_res = pink.validator(SOM_mode=i)
 
                 results.append(validation_res)
 
-                pink.save('trained.pink')
             except Exception as e:
                 print('Try pass captured something')
                 print(e)
+
+                import traceback
+                traceback.print_exc()
 
             plt.close('all')
 

@@ -1466,7 +1466,7 @@ class Pink(Base):
              do it at this point
         '''
         if SOM_mode is not None:
-            raise NotImplemented('SOM_mode is not implemented in attribute_heatmap')
+            raise NotImplementedError('SOM_mode is not implemented in attribute_heatmap')
 
         binary = self._reterive_binary(mode)
 
@@ -1476,7 +1476,6 @@ class Pink(Base):
         if func is None:
             func = self._source_rgz
 
-        print(binary.SOM_path)
         heatmaps = binary.src_heatmap[binary.SOM_path]
         shape = heatmaps[0].shape
         items = binary.get_data(label=label, func=func)
