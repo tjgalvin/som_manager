@@ -9,30 +9,19 @@ from catalog import Source, Binary, Catalog, Pink
 
 def FIRST_Fraction(CHANNELS=[['FIRST']]):
     PROJECT_DIR = 'Script_Experiments_Fraction'
-    # CHANNELS = [['FIRST'], ['FIRST', 'WISE_W1']]
-    # CHANNELS = [['FIRST']]
     BINARY_OPTS = [{'fraction':0.7, 'norm':False, 'log10': False, 'sigma':False, 'convex':False, 'project_dir':'NoNorm_NoLog_NoSig'},
                    {'fraction':0.7, 'norm':True, 'log10': False, 'sigma':False, 'convex':False, 'project_dir':f'Norm_NoLog_NoSig'},
                    {'fraction':0.7, 'norm':True, 'log10': False, 'sigma':3., 'convex':False, 'project_dir':f'Norm_NoLog_3'},
                    {'fraction':0.7, 'norm':True, 'log10': [True, False], 'sigma':3., 'convex':True, 'project_dir':f'Norm_Log_3_Convex'}]
 
-    # BINARY_OPTS = [{'fraction':0.8, 'norm':True, 'log10': False, 'sigma':3., 'project_dir':f'Norm_NoLog_3'},
-    #                {'fraction':0.8, 'norm':True, 'log10': True, 'sigma':3., 'project_dir':f'Norm_Log_3'}]
-
-
     PINK_OPTS = [{'som-width':3, 'som-height':3, 'num-iter':4},
                  {'som-width':7, 'som-height':7, 'num-iter':4},
-                 {'som-width':10, 'som-height':10, 'num-iter':4}]
-
-    # PINK_OPTS = [{'som-width':2, 'som-height':2, 'num-iter':1},
-    #              {'som-width':3, 'som-height':3, 'num-iter':1}]
-
+                 {'som-width':10, 'som-height':10, 'num-iter':4},
+                 {'som-width':13, 'som-height':13, 'num-iter':4},
+                 {'som-width':16, 'som-height':16, 'num-iter':4}]
 
     rgz_dir = 'rgz_rcnn_data'
     cat = Catalog(rgz_dir=rgz_dir)
-
-    # Commenting out to let me ctrl+C without killing things
-    # cat.save_sources()
 
     print('\nValidating sources...')
     cat.collect_valid_sources()
@@ -41,6 +30,11 @@ def FIRST_Fraction(CHANNELS=[['FIRST']]):
     
     for bin_opts, pink_opts, channels in product(BINARY_OPTS, PINK_OPTS, CHANNELS):
         print(bin_opts, pink_opts)
+
+        # Make sure there are enough channels to do the mask with
+        if len(CHANNELS) == 1 and bin_opts['convex']:
+            print(f'Skipping this option set. CHANNELS is {CHANNELS}, nothing to apply convex hull masking to. ')
+            continue
 
         chan_name = '_'.join(channels)
         out_dir = f"{PROJECT_DIR}/{chan_name}_{bin_opts['project_dir']}_{pink_opts['som-width']}x{pink_opts['som-height']}"
@@ -92,6 +86,9 @@ def FIRST_Fraction(CHANNELS=[['FIRST']]):
                 print('Try caught something')
                 print(e)
 
+                import traceback
+                traceback.print_exc()
+
             plt.close('all')
 
             df = pd.DataFrame(results)
@@ -99,8 +96,7 @@ def FIRST_Fraction(CHANNELS=[['FIRST']]):
               
 def FIRST_Segments(CHANNELS=[['FIRST']]):
     PROJECT_DIR = 'Script_Experiments_Segments'
-    # CHANNELS = [['FIRST'], ['FIRST', 'WISE_W1']]
-    # CHANNELS = [['FIRST']]
+
     BINARY_OPTS = [{'segments':4, 'norm':False, 'log10': False, 'sigma':False, 'convex':False, 'project_dirs':'NoNorm_NoLog_NoSig'},
                    {'segments':4, 'norm':True, 'log10': False, 'sigma':False,'convex':False,  'project_dirs':f'Norm_NoLog_NoSig'},
                    {'segments':4, 'norm':True, 'log10': False, 'sigma':3., 'convex':False, 'project_dirs':f'Norm_NoLog_3'},
@@ -108,13 +104,12 @@ def FIRST_Segments(CHANNELS=[['FIRST']]):
 
     PINK_OPTS = [{'som-width':3, 'som-height':3, 'num-iter':4},
                  {'som-width':7, 'som-height':7, 'num-iter':4},
-                 {'som-width':10, 'som-height':10, 'num-iter':4}]
+                 {'som-width':10, 'som-height':10, 'num-iter':4},
+                 {'som-width':13, 'som-height':13, 'num-iter':4},
+                 {'som-width':16, 'som-height':16, 'num-iter':4}]
 
     rgz_dir = 'rgz_rcnn_data'
     cat = Catalog(rgz_dir=rgz_dir)
-
-    # Commenting out to let me ctrl+C without killing things
-    # cat.save_sources()
 
     print('\nValidating sources...')
     cat.collect_valid_sources()
@@ -124,22 +119,32 @@ def FIRST_Segments(CHANNELS=[['FIRST']]):
     for bin_opts, pink_opts, channels in product(BINARY_OPTS, PINK_OPTS, CHANNELS):
         print(bin_opts, pink_opts)
 
+        # Make sure there are enough channels to do the mask with
+        if len(CHANNELS) == 1 and bin_opts['convex']:
+            print(f'Skipping this option set. CHANNELS is {CHANNELS}, nothing to apply convex hull masking to. ')
+            continue
+
         chan_name = '_'.join(channels)
         out_dir = f"{PROJECT_DIR}/{chan_name}_{bin_opts['project_dirs']}_{pink_opts['som-width']}x{pink_opts['som-height']}"
 
-        # This is painful, but since product() is returning a reference to a dict, we cant
-        # edit the project_dir in place to build up the folder name, as this gets carried
-        # through to later iterations. Hence, we can't **bin_opts below
-        bins = cat.dump_binary('source.binary', channels=channels, project_dir=out_dir,
-                               norm=bin_opts['norm'], sigma=bin_opts['sigma'], log10=bin_opts['log10'],
-                               convex=bin_opts['convex'], segments=bin_opts['segments'])
+        if not os.path.exists(f'{out_dir}/trained.pink'):
 
-        train_bin, validate_bin = bins
-        
-        pink = Pink(train_bin, 
-                    pink_args=pink_opts,
-                    validate_binary=validate_bin) 
-        pink.train()
+            # This is painful, but since product() is returning a reference to a dict, we cant
+            # edit the project_dir in place to build up the folder name, as this gets carried
+            # through to later iterations. Hence, we can't **bin_opts below
+            bins = cat.dump_binary('source.binary', channels=channels, project_dir=out_dir,
+                                norm=bin_opts['norm'], sigma=bin_opts['sigma'], log10=bin_opts['log10'],
+                                convex=bin_opts['convex'], segments=bin_opts['segments'])
+
+            train_bin, validate_bin = bins
+            
+            pink = Pink(train_bin, 
+                        pink_args=pink_opts,
+                        validate_binary=validate_bin) 
+            pink.train()
+        else:
+            pink = Pink.loader(f'{out_dir}/trained.pink')
+
         for i, t in enumerate(pink.binary):
             try:
                 pink.map(mode=i)   
@@ -178,10 +183,10 @@ if __name__ == '__main__':
     hostname = socket.gethostname()
 
     if 'bd-client-01' in hostname:
-        FIRST_Fraction()
-    elif 'bd-client-02' in hostname:
         FIRST_Segments()
-    if 'bd-client-03' in hostname:
+    elif 'bd-client-02' in hostname:
+        FIRST_Fraction()
+    elif 'bd-client-03' in hostname:
         FIRST_Fraction(CHANNELS=[['FIRST','WISE_W1']])
     elif 'bd-client-04' in hostname:
         FIRST_Segments(CHANNELS=[['FIRST','WISE_W1']])
