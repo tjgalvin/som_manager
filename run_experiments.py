@@ -19,28 +19,26 @@ def FIRST_Fraction(CHANNELS=[['FIRST']],
     PINK_OPTS = [{'som-width':3, 'som-height':3, 'num-iter':10},
                  {'som-width':7, 'som-height':7, 'num-iter':10},
                  {'som-width':10, 'som-height':10, 'num-iter':10},
-                 {'som-width':13, 'som-height':13, 'num-iter':10},
-                 {'som-width':16, 'som-height':16, 'num-iter':10}]
+                 {'som-width':12, 'som-height':12, 'num-iter':10}]
 
     rgz_dir = 'rgz_rcnn_data'
     cat = Catalog(rgz_dir=rgz_dir)
 
     print('\nValidating sources...')
     cat.collect_valid_sources()
-
-    results = []
     
     for bin_opts, pink_opts, channels in product(BINARY_OPTS, PINK_OPTS, CHANNELS):
         print(bin_opts, pink_opts)
 
         # Make sure there are enough channels to do the mask with
-        if len(CHANNELS) == 1 and bin_opts['convex']:
-            print(f'Skipping this option set. CHANNELS is {CHANNELS}, nothing to apply convex hull masking to. ')
+        if len(CHANNELS[0]) == 1 and bin_opts['convex']:
+            print(f'Skipping this option set. CHANNELS is {CHANNELS[0]}, nothing to apply convex hull masking to. ')
             continue
 
         chan_name = '_'.join(channels)
         out_dir = f"{PROJECT_DIR}/{chan_name}_{bin_opts['project_dir']}_{pink_opts['som-width']}x{pink_opts['som-height']}_Trial{TRIAL}"
-
+        results = []
+        
         if not os.path.exists(f'{out_dir}/trained.pink'):
             # This is painful, but since product() is returning a reference to a dict, we cant
             # edit the project_dir in place to build up the folder name, as this gets carried
@@ -99,17 +97,15 @@ def FIRST_Segments(CHANNELS=[['FIRST']],
                    PROJECT_DIR = 'Script_Experiments_Segments',
                    TRIAL=0):
     REALISATIONS = 1000
-
-    BINARY_OPTS = [{'segments':4, 'norm':False, 'log10': False, 'sigma':False, 'convex':False, 'project_dirs':'NoNorm_NoLog_NoSig'},
-                   {'segments':4, 'norm':True, 'log10': False, 'sigma':False,'convex':False,  'project_dirs':f'Norm_NoLog_NoSig'},
-                   {'segments':4, 'norm':True, 'log10': False, 'sigma':3., 'convex':False, 'project_dirs':f'Norm_NoLog_3'},
-                   {'segments':4, 'norm':True, 'log10': [True, False], 'sigma':3., 'convex':True, 'project_dirs':f'Norm_Log_3_Convex'}]
+    BINARY_OPTS = [{'fraction':0.7, 'norm':False, 'log10': False, 'sigma':False, 'convex':False, 'project_dir':'NoNorm_NoLog_NoSig'},
+                   {'fraction':0.7, 'norm':True, 'log10': False, 'sigma':False, 'convex':False, 'project_dir':f'Norm_NoLog_NoSig'},
+                   {'fraction':0.7, 'norm':True, 'log10': False, 'sigma':3., 'convex':False, 'project_dir':f'Norm_NoLog_3'},
+                   {'fraction':0.7, 'norm':True, 'log10': [True, False], 'sigma':3., 'convex':True, 'project_dir':f'Norm_Log_3_Convex'}]
 
     PINK_OPTS = [{'som-width':3, 'som-height':3, 'num-iter':10},
                  {'som-width':7, 'som-height':7, 'num-iter':10},
                  {'som-width':10, 'som-height':10, 'num-iter':10},
-                 {'som-width':13, 'som-height':13, 'num-iter':10},
-                 {'som-width':16, 'som-height':16, 'num-iter':10}]
+                 {'som-width':12, 'som-height':12, 'num-iter':10}]
 
     rgz_dir = 'rgz_rcnn_data'
     cat = Catalog(rgz_dir=rgz_dir)
@@ -123,8 +119,8 @@ def FIRST_Segments(CHANNELS=[['FIRST']],
         print(bin_opts, pink_opts)
 
         # Make sure there are enough channels to do the mask with
-        if len(CHANNELS) == 1 and bin_opts['convex']:
-            print(f'Skipping this option set. CHANNELS is {CHANNELS}, nothing to apply convex hull masking to. ')
+        if len(CHANNELS[0]) == 1 and bin_opts['convex']:
+            print(f'Skipping this option set. CHANNELS is {CHANNELS[0]}, nothing to apply convex hull masking to. ')
             continue
 
         chan_name = '_'.join(channels)
@@ -196,20 +192,12 @@ if __name__ == '__main__':
     # ----------------------------------------------------------
     if 'bd-client-01' in hostname:
         for i in batch1:
-            FIRST_Segments(TRIAL=i, PROJECT_DIR=SEGS_DIR)
-
-        for i in batch2:
-            FIRST_Fraction(CHANNELS=[['FIRST','WISE_W1']],
-                           TRIAL=i, PROJECT_DIR=FRAC_DIR)
+            FIRST_Fraction(TRIAL=i, PROJECT_DIR=SEGS_DIR)
 
     # ----------------------------------------------------------
     elif 'bd-client-02' in hostname:
-        for i in batch1:
-            FIRST_Fraction(TRIAL=i, PROJECT_DIR=FRAC_DIR)
-
         for i in batch2:
-            FIRST_Segments(CHANNELS=[['FIRST','WISE_W1']],
-                           TRIAL=i, PROJECT_DIR=SEGS_DIR)
+            FIRST_Fraction(TRIAL=i, PROJECT_DIR=FRAC_DIR)
     
     # ----------------------------------------------------------
     elif 'bd-client-03' in hostname:
@@ -217,17 +205,52 @@ if __name__ == '__main__':
             FIRST_Fraction(CHANNELS=[['FIRST','WISE_W1']],
                            TRIAL=i, PROJECT_DIR=FRAC_DIR)
 
-        for i in batch2:
-            FIRST_Segments(TRIAL=i, PROJECT_DIR=SEGS_DIR)
-
     # ----------------------------------------------------------
     elif 'bd-client-04' in hostname:
-        for i in batch1:
-            FIRST_Segments(CHANNELS=[['FIRST','WISE_W1']],
-                           TRIAL=i, PROJECT_DIR=SEGS_DIR)
-
         for i in batch2:
-            FIRST_Fraction(TRIAL=i, PROJECT_DIR=FRAC_DIR)
+            FIRST_Fraction(CHANNELS=[['FIRST','WISE_W1']],
+                           TRIAL=i, PROJECT_DIR=SEGS_DIR)
             
     else:
         print('No matching hostname...')
+
+
+# OLD MODE OF PROCESS
+    # # ----------------------------------------------------------
+    # if 'bd-client-01' in hostname:
+    #     for i in batch1:
+    #         FIRST_Segments(TRIAL=i, PROJECT_DIR=SEGS_DIR)
+
+    #     for i in batch2:
+    #         FIRST_Fraction(CHANNELS=[['FIRST','WISE_W1']],
+    #                        TRIAL=i, PROJECT_DIR=FRAC_DIR)
+
+    # # ----------------------------------------------------------
+    # elif 'bd-client-02' in hostname:
+    #     for i in batch1:
+    #         FIRST_Fraction(TRIAL=i, PROJECT_DIR=FRAC_DIR)
+
+    #     for i in batch2:
+    #         FIRST_Segments(CHANNELS=[['FIRST','WISE_W1']],
+    #                        TRIAL=i, PROJECT_DIR=SEGS_DIR)
+    
+    # # ----------------------------------------------------------
+    # elif 'bd-client-03' in hostname:
+    #     for i in batch1:
+    #         FIRST_Fraction(CHANNELS=[['FIRST','WISE_W1']],
+    #                        TRIAL=i, PROJECT_DIR=FRAC_DIR)
+
+    #     for i in batch2:
+    #         FIRST_Segments(TRIAL=i, PROJECT_DIR=SEGS_DIR)
+
+    # # ----------------------------------------------------------
+    # elif 'bd-client-04' in hostname:
+    #     for i in batch1:
+    #         FIRST_Segments(CHANNELS=[['FIRST','WISE_W1']],
+    #                        TRIAL=i, PROJECT_DIR=SEGS_DIR)
+
+    #     for i in batch2:
+    #         FIRST_Fraction(TRIAL=i, PROJECT_DIR=FRAC_DIR)
+            
+    # else:
+    #     print('No matching hostname...')
