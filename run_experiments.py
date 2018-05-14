@@ -14,6 +14,7 @@ def FIRST_Fraction(CHANNELS=[['FIRST']],
     BINARY_OPTS = [{'fraction':0.7, 'norm':False, 'log10': False, 'sigma':False, 'convex':False, 'project_dir':'NoNorm_NoLog_NoSig'},
                    {'fraction':0.7, 'norm':True, 'log10': False, 'sigma':False, 'convex':False, 'project_dir':f'Norm_NoLog_NoSig'},
                    {'fraction':0.7, 'norm':True, 'log10': False, 'sigma':3., 'convex':False, 'project_dir':f'Norm_NoLog_3'},
+                   {'fraction':0.7, 'norm':True, 'log10': [True,False], 'sigma':3., 'convex':False, 'project_dir':f'Norm_Log_3'},
                    {'fraction':0.7, 'norm':True, 'log10': [True, False], 'sigma':3., 'convex':True, 'project_dir':f'Norm_Log_3_Convex'}]
 
     PINK_OPTS = [{'som-width':3, 'som-height':3, 'num-iter':10},
@@ -113,7 +114,6 @@ def FIRST_Segments(CHANNELS=[['FIRST']],
     print('\nValidating sources...')
     cat.collect_valid_sources()
 
-    results = []
     
     for bin_opts, pink_opts, channels in product(BINARY_OPTS, PINK_OPTS, CHANNELS):
         print(bin_opts, pink_opts)
@@ -125,6 +125,7 @@ def FIRST_Segments(CHANNELS=[['FIRST']],
 
         chan_name = '_'.join(channels)
         out_dir = f"{PROJECT_DIR}/{chan_name}_{bin_opts['project_dirs']}_{pink_opts['som-width']}x{pink_opts['som-height']}_Trial{TRIAL}"
+        results = []
 
         if not os.path.exists(f'{out_dir}/trained.pink'):
 
@@ -192,7 +193,7 @@ if __name__ == '__main__':
     # ----------------------------------------------------------
     if 'bd-client-01' in hostname:
         for i in batch1:
-            FIRST_Fraction(TRIAL=i, PROJECT_DIR=SEGS_DIR)
+            FIRST_Fraction(TRIAL=i, PROJECT_DIR=FRAC_DIR)
 
     # ----------------------------------------------------------
     elif 'bd-client-02' in hostname:
@@ -209,7 +210,7 @@ if __name__ == '__main__':
     elif 'bd-client-04' in hostname:
         for i in batch2:
             FIRST_Fraction(CHANNELS=[['FIRST','WISE_W1']],
-                           TRIAL=i, PROJECT_DIR=SEGS_DIR)
+                           TRIAL=i, PROJECT_DIR=FRAC_DIR)
             
     else:
         print('No matching hostname...')
