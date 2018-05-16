@@ -1296,7 +1296,7 @@ class Pink(Base):
             plt.savefig(save)
 
     def _label_plot(self, book, shape, save=None, xtick_rotation=None, 
-                    color_map='gnuplot2', title=None, weights=None):
+                    color_map='gnuplot2', title=None, weights=None, figsize=(6,6)):
         '''Isolated function to plot the attribute histogram if the data is labelled in 
         nature
 
@@ -1318,6 +1318,8 @@ class Pink(Base):
             If not None, the dict will have keys corresponding to the labels, and contain the total
             set of counts from the Binary file/book object. This will be used to `weigh` the contribution
             per neuron, to instead be a fraction of dataset type of statistic. 
+        figsize - tuple of int
+            Size of the figure to produce. Passed directly to plt.subplots
         '''
         save = self._path_build(save)
 
@@ -1347,7 +1349,7 @@ class Pink(Base):
         cmap = plt.get_cmap(color_map)
         norm = mpl.colors.Normalize(vmin=0, vmax=1)
 
-        fig, ax = plt.subplots(nrows=shape[0], ncols=shape[1])
+        fig, ax = plt.subplots(nrows=shape[0], ncols=shape[1], figsize=figsize)
 
         # Set empty axis labels for everything
         for a in ax.flatten():
@@ -1387,6 +1389,8 @@ class Pink(Base):
             else:
                 if xtick_rotation is not None:
                     ax[k].tick_params(axis='x', rotation=xtick_rotation)
+                    for item in ax[k].get_xticklabels():
+                        item.set_fontsize(8)
 
         fig.subplots_adjust(right=0.83)
         cax = fig.add_axes([0.85, 0.10, 0.03, 0.8])
@@ -1402,7 +1406,6 @@ class Pink(Base):
         else:
             cb1.set_label('Fraction of Dataset')
             
-
         if title is not None:
             fig.suptitle(title)
 
@@ -1450,7 +1453,7 @@ class Pink(Base):
              Plot the attribute heatmap/distribution
         func - Function or callable
              Function that may be applied to each of the instances of Source
-        global_normalise - bool
+        global_normalise - bool - TODO: Remove this option. Think it does nothing.
              Produce counts of each label across the entire dataset, idea being
              that they are than used to `weight` the counts after the fact. For
              instance, the `1_1` label is more common, so should be downweighted
