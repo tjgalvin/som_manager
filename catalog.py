@@ -1296,7 +1296,8 @@ class Pink(Base):
             plt.savefig(save)
 
     def _label_plot(self, book, shape, save=None, xtick_rotation=None, 
-                    color_map='gnuplot2', title=None, weights=None, figsize=(6,6)):
+                    color_map='gnuplot2', title=None, weights=None, figsize=(6,6),
+                    literal_path=False):
         '''Isolated function to plot the attribute histogram if the data is labelled in 
         nature
 
@@ -1320,8 +1321,11 @@ class Pink(Base):
             per neuron, to instead be a fraction of dataset type of statistic. 
         figsize - tuple of int
             Size of the figure to produce. Passed directly to plt.subplots
+        literal_path - bool
+            If true, take the path and do not modify it. If False, prepend the project_dir path
         '''
-        save = self._path_build(save)
+        if not literal_path:
+            save = self._path_build(save)
 
         # Need access to the Normalise and ColorbarBase objects
         import matplotlib as mpl
@@ -1390,7 +1394,7 @@ class Pink(Base):
                 if xtick_rotation is not None:
                     ax[k].tick_params(axis='x', rotation=xtick_rotation)
                     for item in ax[k].get_xticklabels():
-                        item.set_fontsize(8)
+                        item.set_fontsize(7.5)
 
         fig.subplots_adjust(right=0.83)
         cax = fig.add_axes([0.85, 0.10, 0.03, 0.8])
