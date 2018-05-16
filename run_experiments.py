@@ -192,14 +192,16 @@ if __name__ == '__main__':
     
     # ----------------------------------------------------------
     if 'bd-client-01' in hostname:
-        for i in batch1:
-            FIRST_Fraction(TRIAL=i, PROJECT_DIR=FRAC_DIR)
-
+        # for i in batch1:
+            # FIRST_Fraction(TRIAL=i, PROJECT_DIR=FRAC_DIR)
+        FIRST_Fraction(CHANNELS=[['FIRST','WISE_W1']],
+                        TRIAL=4, PROJECT_DIR=FRAC_DIR)
     # ----------------------------------------------------------
     elif 'bd-client-02' in hostname:
-        for i in batch2:
-            FIRST_Fraction(TRIAL=i, PROJECT_DIR=FRAC_DIR)
-    
+        # for i in batch2:
+            # FIRST_Fraction(TRIAL=i, PROJECT_DIR=FRAC_DIR)
+        FIRST_Fraction(CHANNELS=[['FIRST','WISE_W1']],
+                    TRIAL=9, PROJECT_DIR=FRAC_DIR)
     # ----------------------------------------------------------
     elif 'bd-client-03' in hostname:
         for i in batch1:
