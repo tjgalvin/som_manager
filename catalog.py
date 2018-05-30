@@ -1489,6 +1489,8 @@ class Pink(Base):
 
         book = defaultdict(list)
         global_counts = defaultdict(int)
+        book_counts = defaultdict(int)
+
         if realisations == 1:
             for heat, item in zip(heatmaps, items):
                 loc = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
