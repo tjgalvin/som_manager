@@ -1692,8 +1692,9 @@ class Pink(Base):
                     answer_book['total']['wrong'] += 1
                 answer_book[guess]['accuracy'] = answer_book[guess]['correct'] / (answer_book[guess]['correct']+answer_book[guess]['wrong'] )
                 answer_book['total']['accuracy'] = answer_book['total']['correct'] / (answer_book['total']['correct']+answer_book['total']['wrong'] )
-            except:
+            except Exception as e:
                 empty += 1    
+                print(e)
         # Flatten out the dict of dicts into a single dict
         flattened_book = {f'{k}_{k2}': v2 for k, v in answer_book.items() for k2, v2 in v.items()}
 
