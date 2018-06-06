@@ -56,6 +56,10 @@ def FIRST_Fraction(CHANNELS=[['FIRST']],
                 result = pink.validator(SOM_mode=i, pack=True)                
                 print('\t', result['total_accuracy'], result['total_correct']+result['total_wrong'])
                 results.append(result)
+
+                result = pink.prob_validator(SOM_mode=i, realisations=100, weights=True, pack=True)                
+                print('\t', result['total_accuracy'], result['total_correct']+result['total_wrong'])
+                results.append(result)
                 
                 # result = pink.validator(SOM_mode=i, realisations=100)                
                 # print(result['total_accuracy'], result['total_correct']+result['total_wrong'])

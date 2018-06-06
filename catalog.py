@@ -1711,6 +1711,127 @@ class Pink(Base):
         flattened_book = {f'{k}_{k2}': v2 for k, v in answer_book.items() for k2, v2 in v.items()}
 
         if pack:
+            flattened_book['probability_summed'] = False
+            flattened_book['weighted'] = weights
+            flattened_book['empty_neuron_attempts'] = empty
+            flattened_book['train_src_hash'] = train.binary_hash
+            flattened_book['train_SOM_hash'] = train.SOM_hash
+            flattened_book['valid_src_hash'] = valid.binary_hash
+            flattened_book['train_segment'] = SOM_mode
+            flattened_book['validate_path'] = valid.binary_path
+            flattened_book['trained_SOM'] = train.binary_path
+            flattened_book['realisations'] = realisations
+            flattened_book['experiment'] = self.project_dir
+            flattened_book.update(train.preprocessor_args)
+            flattened_book.update(self.pink_args)
+
+        return flattened_book
+
+    def ed_to_prob(self, ed, stretch=10):
+        prob = 1. / ed**stretch
+        prob = prob / prob.sum()
+        
+        return prob
+    
+    def prob_validator(self, mode='validate', SOM_mode='train' , realisations=1, func=None, pack=True,
+                             weights=False):
+        '''The code to check the validate data agaisnt the training data. Use the distribution
+        of labels from some neuron from the training data to predict the label of the source
+        from the validate set. Compute the sum by using the probabilty matric of the subject source
+        to poll all the neurons for their labels. 
+
+        mode - str or int
+            Value passed to _reterive_binary(). This should almost certainly remain set as
+            `validate`, although I am leaving it as an option if I have to change things
+            down the line
+        SOM_mode - str or int
+            Value pased to _reterive_binary(). This is the binary that will be seen as ground
+            truth and what the validate binary is compared agaisnt
+        realisations - int
+            The number of times to use the heatmap to select a position to put something
+        func - None or Function
+            The function used to process the labels. If None, use a default method
+        pack - bool
+            Back the answer dict object with the number of realisations, the preprocessor arguments
+            and the Pink specific arguments
+        weights - bool
+            Use the counts of a label across the entire dataset as a weight when calculating
+            the distribution of labels on a per neuron basis
+        '''
+        from collections import Counter
+
+        if mode != 'validate':
+            print(f'WARNING: validation binary is set to {mode}')
+
+        # Get items
+        train = self._reterive_binary(SOM_mode)
+        valid = self.validate_binary
+        valid = self._reterive_binary(mode)
+
+        # Get the `book` object from the training data with label types
+        if func is None:
+            func = self._source_rgz
+
+        book, label_counts = self.attribute_heatmap(func=func, mode=SOM_mode, realisations=realisations, plot=False)
+        answer_book = defaultdict( lambda : {'correct':0,'wrong':0, 'accuracy':0} )
+
+        # Get unique labels first
+        unique_labels = []
+        for key in book:
+            v = set([i for items in book[key] for i in items])
+            for i in v:
+                unique_labels.append(i)
+        unique_labels = list(set(unique_labels))
+        unique_labels.sort()
+        
+        print(unique_labels)
+
+        # For speed, loop through the entire `book` object once and apply scheme
+        for key in book:
+            v = [i for items in book[key] for i in items]
+            c = Counter(v)
+            if weights:
+                arr = np.array([c[i]/label_counts[i] for i in unique_labels])
+            else:
+                arr = np.array([c[i]/sum(c.values()) for i in unique_labels])
+            book[key] = arr
+
+        for src, heat in zip(valid.sources, valid.src_heatmap[train.SOM_path]):
+            prob = self.ed_to_prob(heat, stretch=10.)
+            
+            values = defaultdict(float)
+            empty = 0
+
+    # Orignal methof using only the max label of each neuron
+    #         for key in book:
+    #             values[unique_labels[np.argmax(book[key])]] += prob[key] * max(book[key])
+            
+            # Poll all labels in each neuron
+            for count, label in enumerate(unique_labels):
+                for key in book:
+                    values[label] += prob[key] * book[key][count]
+            
+            
+            import operator
+            guess = max(values.items(), key=operator.itemgetter(1))[0]
+            prediction = [i for i in func(src)]
+            if len(prediction) > 0:
+                if guess in [i for i in func(src)]:
+                    answer_book[guess]['correct'] += 1
+                    answer_book['total']['correct'] += 1
+                else:
+                    answer_book[guess]['wrong'] += 1
+                    answer_book['total']['wrong'] += 1
+                answer_book[guess]['accuracy'] = answer_book[guess]['correct'] / (answer_book[guess]['correct']+answer_book[guess]['wrong'] )
+                answer_book['total']['accuracy'] = answer_book['total']['correct'] / (answer_book['total']['correct']+answer_book['total']['wrong'] )
+            else:
+                empty += 1
+                
+        # Flatten out the dict of dicts into a single dict
+        flattened_book = {f'{k}_{k2}': v2 for k, v in answer_book.items() for k2, v2 in v.items()}
+
+        if pack:
+            flattened_book['probability_summed'] = True
             flattened_book['weighted'] = weights
             flattened_book['empty_neuron_attempts'] = empty
             flattened_book['train_src_hash'] = train.binary_hash
