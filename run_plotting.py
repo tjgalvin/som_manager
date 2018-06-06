@@ -138,6 +138,101 @@ def label_plot(book, shape, save=None, xtick_rotation=None,
     else:
         plt.savefig(save)
 
+cl_csv = '../rgz_rcnn/data/RGZdevkit2017/RGZ2017/ImageSets/Main/full_catalogue.csv'
+cl_df = pd.read_csv(cl_csv)
+def reduc_func(s):
+    '''Function to acquire the census levels of the objects
+    '''
+    filename = s.filename.split('_')[0]
+    rows = cl_df[cl_df['first_id']==filename]
+    res = []
+    for k, r in rows.iterrows():
+        label = f"{r['num_cpnts']}_{r['num_peaks']}"
+        res.append((label, r['cl']))
+
+    return res
+
+def cl_label_plot(book, shape, save=None, xtick_rotation=None, 
+                color_map='gnuplot2', title=None, weights=None, figsize=(6,6),
+                literal_path=False, count_text=False):
+    '''Isolated function to plot the consensus histogram of the data is labelled in 
+    nature
+
+    book - dict
+        A dictionary whose keys are the location on the heatmap, and values
+        are the list of values of sources who most belonged to that grid
+    shape - tuple
+        The shape of the grid. Should attempt to get this from the keys or
+        possible recreate it like in self.attribute_heatmap() 
+    save - None or Str
+        If None, show the figure on screen. Otherwise save to the path in save
+    xtick_rotation - None or float
+        Will rotate the xlabel by rotation
+    color_map - str
+        The name of the matplotlib.colormap that will be passed directly to matplotlib.pyplot.get_map()
+    title - None of str
+        A simple title strng passed to fig.suptitle()
+    weights - None or dict
+        If not None, the dict will have keys corresponding to the labels, and contain the total
+        set of counts from the Binary file/book object. This will be used to `weigh` the contribution
+        per neuron, to instead be a fraction of dataset type of statistic. 
+    figsize - tuple of int
+        Size of the figure to produce. Passed directly to plt.subplots
+    literal_path - bool
+        If true, take the path and do not modify it. If False, prepend the project_dir path
+    count_label - bool
+        If true, put as an anotation the counts of items in that neuron plot
+    '''
+    # Need access to the Normalise and ColorbarBase objects
+    import matplotlib as mpl
+    from collections import Counter
+    from collections import defaultdict
+    unique_labels = []
+
+    for k, v in book.items():
+        v = [i[0][0] for i in v if len(i) > 0]
+        c = Counter(v)
+        unique_labels.append(c.keys())
+
+    unique_labels = list(set([u for labels in unique_labels for u in labels]))
+    unique_labels.sort()
+
+    fig, ax = plt.subplots(nrows=shape[0]+1, ncols=shape[1]+1, figsize=figsize)
+
+    # Set empty axis labels for everything
+    for a in ax.flatten():
+        a.set(xticklabels=[])
+
+    for k, v in book.items():
+        
+        # Guard agaisnt most similar empty neuron
+        if len(v) > 0:
+            vals = defaultdict(list)
+            for item in v:
+                if len(item) > 0:
+                    vals[item[0][0]].append(item[0][1])
+
+            ax[k].boxplot([vals[i] for i in unique_labels], labels=unique_labels,sym='k.',
+                         flierprops={'markersize':0.25})
+            ax[k].set(ylim=[0.45,1.05])
+            
+        if k[1] != 0: 
+            ax[k].set(yticklabels=[])
+        if k[0] != shape[1]:
+            ax[k].set(xticklabels=[])
+        else:
+            if xtick_rotation is not None:
+                ax[k].tick_params(axis='x', rotation=xtick_rotation)
+
+    if title is not None:
+        fig.suptitle(title, y=0.9)
+
+    fig.subplots_adjust(hspace=0.05, wspace=0.05)
+    if save is None:
+        plt.show()
+    else:
+        plt.savefig(save)
+
 def FIRST_Fraction(CHANNELS=[['FIRST']],
                    PROJECT_DIR = 'Script_Experiments_Fraction',
                    TRIAL=0):
@@ -187,44 +282,13 @@ def FIRST_Fraction(CHANNELS=[['FIRST']],
                        save=f'{pink.project_dir}/Label_Dist_Weighted_100.png')
             label_plot(book, get_shape(book), color_map='Blues', xtick_rotation=90, count_text=True, figsize=(10,10),
                        save=f'{pink.project_dir}/Label_Dist_100.png')
+            print('\tConsensus Level Plot')
+            book, counts = pink.attribute_heatmap(func=reduc_func, plot=False, realisations=100)
+            cl_label_plot(book, get_shape(book), xtick_rotation=90, figsize=(10,10),
+                          save=f'{pink.project_dir}/CL_Label_Dist_Weighted_100.png')
             
-        # for i, t in enumerate(pink.binary):
-        #     try:
-        #         pink.map(mode=i)   
-        #         pink.map(mode='validate', SOM_mode=i)   
-                
-        #         pink.save('trained.pink')
-
-        #         pink.show_som(channel=0, mode=i)
-        #         pink.show_som(channel=0, mode=i, plt_mode='split')
-        #         pink.show_som(channel=0, mode=i, plt_mode='grid')
-        #         pink.show_som(channel=1, mode=i)
-        #         pink.show_som(channel=1, mode=i, plt_mode='split')
-        #         pink.show_som(channel=1, mode=i, plt_mode='grid')
-        #         pink.attribute_heatmap(save=f'train_{i}_labels_dist.pdf', mode=i)
-        #         pink.attribute_heatmap(save=f'train_{i}_MC{REALISATIONS}_labels_dist.pdf', mode=i, realisations=REALISATIONS)
-
-        #         pink.count_map(mode=i, save=f'train_{i}_count_map.pdf')
-        #         pink.count_map(mode='validate', SOM_mode=i, save=f'validate_{i}_count_map.pdf')
-
-        #         validation_res = pink.validator(SOM_mode=i)
-
-        #         results.append(validation_res)
-
-
-            # except Exception as e:
-            #     print('Try caught something')
-            #     print(e)
-
-                # import traceback
-                # traceback.print_exc()
-
             plt.close('all')
-
-            # df = pd.DataFrame(results)
-            # df.to_json(f'{pink.project_dir}/FIRST_Results.json')
-              
-
+    
 if __name__ == '__main__':
     import socket
     hostname = socket.gethostname()
