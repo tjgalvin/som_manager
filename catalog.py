@@ -1655,6 +1655,8 @@ class Pink(Base):
         book, label_counts = self.attribute_heatmap(func=func, mode=SOM_mode, realisations=realisations, plot=False)
         answer_book = defaultdict( lambda : {'correct':0,'wrong':0, 'accuracy':0} )
 
+        # print(label_counts)
+
         # For speed, loop through the entire `book` object once now and flatten the items
         for key in book:
             v = [i for items in book[key] for i in items]
@@ -1670,12 +1672,16 @@ class Pink(Base):
             try:
                 # Build up the distribution of answers here
                 # v = [i for items in book[loc] for i in items]
-                v = book[loc]
-                c = Counter(v)
+                c = book[loc]
+                if isinstance(c, list):
+                    c = Counter(c)
+                    book[loc] = c
+
                 if weights:
                     arr = np.array([c[i]/label_counts[i] for i in c.keys()])
                 else:
                     arr = np.array([c[i] for i in c.keys()])
+                # print(arr)
                 items = [i for i in c.keys()]
 
                 # Given the distribution of answers for that Neuron, make the guess.
@@ -1684,14 +1690,20 @@ class Pink(Base):
                 # Using the distribution as a method of selecting generally does pretty poorly...
                 # guess = np.random.choice(items, p=arr / np.sum(arr))
 
-                if guess in [i for i in func(src)]:
-                    answer_book[guess]['correct'] += 1
-                    answer_book['total']['correct'] += 1
+                
+                predict = [i for i in func(src)]
+                if len(predict) == 0:
+                    empty += 1
                 else:
-                    answer_book[guess]['wrong'] += 1
-                    answer_book['total']['wrong'] += 1
-                answer_book[guess]['accuracy'] = answer_book[guess]['correct'] / (answer_book[guess]['correct']+answer_book[guess]['wrong'] )
-                answer_book['total']['accuracy'] = answer_book['total']['correct'] / (answer_book['total']['correct']+answer_book['total']['wrong'] )
+                    if guess in [i for i in func(src)]:
+                        answer_book[guess]['correct'] += 1
+                        answer_book['total']['correct'] += 1
+                    else:
+                        answer_book[guess]['wrong'] += 1
+                        answer_book['total']['wrong'] += 1
+                    answer_book[guess]['accuracy'] = answer_book[guess]['correct'] / (answer_book[guess]['correct']+answer_book[guess]['wrong'] )
+                    answer_book['total']['accuracy'] = answer_book['total']['correct'] / (answer_book['total']['correct']+answer_book['total']['wrong'] )
+
             except Exception as e:
                 empty += 1    
                 print(e)
@@ -1713,6 +1725,137 @@ class Pink(Base):
             flattened_book.update(self.pink_args)
 
         return flattened_book
+
+    def weight_test(self, mode='validate', SOM_mode='train' , realisations=1, func=None, pack=True,
+                  weights=False):
+        '''Code to test that the weighting option when predicting is doing the correct thing. 
+
+        I was unsure whether they were being weighted by the total counts of the labls in the set correctly.
+        This let me hack up a few more sanity checks without compromising the original code.
+
+        mode - str or int
+             Value passed to _reterive_binary(). This should almost certainly remain set as
+             `validate`, although I am leaving it as an option if I have to change things
+             down the line
+        SOM_mode - str or int
+             Value pased to _reterive_binary(). This is the binary that will be seen as ground
+             truth and what the validate binary is compared agaisnt
+        realisations - int
+             The number of times to use the heatmap to select a position to put something
+        func - None or Function
+             The function used to process the labels. If None, use a default method
+        pack - bool
+             Back the answer dict object with the number of realisations, the preprocessor arguments
+             and the Pink specific arguments
+        weights - bool
+             Use the counts of a label across the entire dataset as a weight when calculating
+             the distribution of labels on a per neuron basis
+        '''
+        from collections import Counter
+
+        if mode != 'validate':
+            print(f'WARNING: validation binary is set to {mode}')
+
+        # Get items
+        train = self._reterive_binary(SOM_mode)
+        valid = self.validate_binary
+        valid = self._reterive_binary(mode)
+
+        # Get the `book` object from the training data with label types
+        if func is None:
+            func = self._source_rgz
+
+        book, label_counts = self.attribute_heatmap(func=func, mode=SOM_mode, realisations=realisations, plot=False)
+        answer_book = defaultdict( lambda : {'correct':0,'wrong':0, 'accuracy':0} )
+
+        print(label_counts)
+        unique_labels = [i for i in label_counts.keys()]
+        unique_labels.sort()
+
+        empty = 0
+
+        # For speed, loop through the entire `book` object once now and flatten the items
+        for key in book:
+            v = [i for items in book[key] for i in items]
+            book[key] = v
+            
+        key = '1_1'
+        for key in unique_labels:
+            stats = []
+            for loc in book:
+                c = Counter(book[loc])
+                stats.append(c[key] / label_counts[key])
+
+            # print(stats)
+            print('\t', key, sum(stats))
+
+        for src, heat in zip(valid.sources, valid.src_heatmap[train.SOM_path]):
+            loc = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
+
+            c = book[loc]
+            if isinstance(c, list):
+                c = Counter(c)
+                book[loc] = c
+
+            arr = np.array([c[i] / label_counts[i] for i in unique_labels])
+
+            guess = unique_labels[np.argmax(arr)]
+            # print(arr)
+            # print(guess)
+
+            # print([i for i in func(src)])
+            predict = [i for i in func(src)]
+            if len(predict) == 0:
+                empty += 1
+            else:
+                if guess in [i for i in func(src)]:
+                    answer_book[guess]['correct'] += 1
+                    answer_book['total']['correct'] += 1
+                else:
+                    answer_book[guess]['wrong'] += 1
+                    answer_book['total']['wrong'] += 1
+                answer_book[guess]['accuracy'] = answer_book[guess]['correct'] / (answer_book[guess]['correct']+answer_book[guess]['wrong'] )
+                answer_book['total']['accuracy'] = answer_book['total']['correct'] / (answer_book['total']['correct']+answer_book['total']['wrong'] )
+
+        print('\t', answer_book['total']['accuracy'])
+
+        # for src, heat in zip(valid.sources, valid.src_heatmap[train.SOM_path]):
+        #     loc = np.unravel_index(np.argmin(heat, axis=None), heat.shape)
+
+        #     # Capture an error if we can't increment counters. Most'y happens
+        #     # when the book object doesnt have a loc
+        #     try:
+        #         # Build up the distribution of answers here
+        #         # v = [i for items in book[loc] for i in items]
+        #         v = book[loc]
+        #         c = Counter(v)
+        #         if weights:
+        #             arr = np.array([c[i]/label_counts[i] for i in c.keys()])
+        #         else:
+        #             arr = np.array([c[i] for i in c.keys()])
+        #         # print(arr)
+        #         # print(c)
+        #         # print(unique_labels)
+        #         items = [i for i in c.keys()]
+
+        #         # Given the distribution of answers for that Neuron, make the guess.
+        #         guess = items[np.argmax(arr)]
+                
+        #         # Using the distribution as a method of selecting generally does pretty poorly...
+        #         # guess = np.random.choice(items, p=arr / np.sum(arr))
+
+        #         if guess in [i for i in func(src)]:
+        #             answer_book[guess]['correct'] += 1
+        #             answer_book['total']['correct'] += 1
+        #         else:
+        #             answer_book[guess]['wrong'] += 1
+        #             answer_book['total']['wrong'] += 1
+        #         answer_book[guess]['accuracy'] = answer_book[guess]['correct'] / (answer_book[guess]['correct']+answer_book[guess]['wrong'] )
+        #         answer_book['total']['accuracy'] = answer_book['total']['correct'] / (answer_book['total']['correct']+answer_book['total']['wrong'] )
+        #     except Exception as e:
+        #         empty += 1    
+        #         print(e)
+
 
 if __name__ == '__main__':
 

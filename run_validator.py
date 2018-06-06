@@ -42,13 +42,29 @@ def FIRST_Fraction(CHANNELS=[['FIRST']],
             pink = Pink.loader(f'{out_dir}/trained.pink')
 
             for i, t in enumerate(pink.binary):
+                
                 print('\tRunning Validator')
-                result = pink.validator(SOM_mode=i)                
-                print(result)
-                result = pink.validator(SOM_mode=i, realisations=100)                
-                print(result)
-                result = pink.validator(SOM_mode=i, realisations=100, weights=True)                
-                print(result)
+                pink.weight_test(SOM_mode=i, realisations=100)
+                result = pink.validator(SOM_mode=i, realisations=100, weights=True, pack=True)                
+                print('\t', result['total_accuracy'])
+                results.append(result)
+
+                result = pink.validator(SOM_mode=i, realisations=100, pack=True)                
+                print('\t', result['total_accuracy'])
+                results.append(result)
+
+                result = pink.validator(SOM_mode=i, pack=True)                
+                print('\t', result['total_accuracy'], result['total_correct']+result['total_wrong'])
+                results.append(result)
+                
+                # result = pink.validator(SOM_mode=i, realisations=100)                
+                # print(result['total_accuracy'], result['total_correct']+result['total_wrong'])
+
+                # result = pink.validator(SOM_mode=i, realisations=100, weights=True)                
+                # print(result['total_accuracy'], result['total_correct']+result['total_wrong'])
+
+            df = pd.DataFrame(results)
+            df.to_json(f'{pink.project_dir}/Weighted_Results.json')
 
         # for i, t in enumerate(pink.binary):
         #     try:
