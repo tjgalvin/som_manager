@@ -28,7 +28,9 @@ def main():
         pink = Pink(train_bin, 
                     pink_args=pink_opts,
                     validate_binary=validate_bin) 
-        pink.train()
+        pink.train(learning=[('gaussian','3.0','0.1'),
+                             ('gaussian','1.4','0.05'),
+                             ('gaussian','0.3','0.01')])
         pink.save('trained.pink')
 
 
@@ -66,6 +68,8 @@ def main():
 # ---------------------------------------------------------
     proj_dir = 'FIRST_WISE_Norm_Log_3'
 
+    pink_opts = {'som-width':10, 'som-height':10, 'num-iter':10, 'progress':1./50., 'inter-store':'keep'}
+
     out_dir = f"{test_dir}/{proj_dir}_{pink_opts['som-width']}x{pink_opts['som-height']}_10_iter"
     if not os.path.exists(f'{out_dir}/trained.pink'):
         bins = cat.dump_binary('source.binary', channels=['FIRST', 'WISE_W1'], project_dir=out_dir,
@@ -80,7 +84,7 @@ def main():
         pink.save('trained.pink')
 
 
-    pink_opts = {'som-width':10, 'som-height':10, 'num-iter':20, 'inter-store':'keep'}
+    pink_opts = {'som-width':10, 'som-height':10, 'num-iter':20, 'progress':1./50., 'inter-store':'keep'}
     
     out_dir = f"{test_dir}/{proj_dir}_{pink_opts['som-width']}x{pink_opts['som-height']}_20_iter"
     if not os.path.exists(f'{out_dir}/trained.pink'):
@@ -95,7 +99,7 @@ def main():
         pink.train()
         pink.save('trained.pink')
 
-    pink_opts = {'som-width':10, 'som-height':10, 'num-iter':30, 'inter-store':'keep'}
+    pink_opts = {'som-width':10, 'som-height':10, 'num-iter':30, 'progress':1./50., 'inter-store':'keep'}
     
     out_dir = f"{test_dir}/{proj_dir}_{pink_opts['som-width']}x{pink_opts['som-height']}_30_iter"
     if not os.path.exists(f'{out_dir}/trained.pink'):

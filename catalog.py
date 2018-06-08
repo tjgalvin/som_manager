@@ -888,7 +888,7 @@ class Pink(Base):
         '''
         self.pink_args.update(kwargs)
 
-    def _train(self, binary=None, SOM_path=None):
+    def _train(self, binary=None, SOM_path=None, learning=None):
         '''Train the SOM with PINK using the supplied options and Binary file
         
         binary - None or Binary
@@ -897,6 +897,10 @@ class Pink(Base):
         SOM_path - None or str
              If None, use the self.SOM_path attribute. Otherwise, try on the provided
              SOM_path value
+        learning - None or list of tuples
+             If None, use a default learning mode. Otherwise, iterate over the 
+             list and perform each specific learning mode, daisy chaining the 
+             output of the previous PINK as the input into the next. 
         '''
         if self.trained:
             print('The SOM has been trained already')
@@ -908,25 +912,46 @@ class Pink(Base):
         if binary.binary_hash != get_hash(binary.binary_path):
             raise ValueError(f'The hash checked failed for {binary.binary_path}')
 
+        if learning is None:
+            learning = [('gaussian', '3.' , '0.2')]
+        
+        inter_stages = []
+
         pink_avail = True if shutil.which('Pink') is not None else False
-        exec_str  = f'Pink --train {binary.binary_path} {binary.SOM_path} '
-        exec_str += ' '.join(f'--{k}={v}' for k,v in self.pink_args.items())
+        
+        for count, mode in enumerate(learning):
+            if count == len(learning) - 1:
+                out_path = binary.SOM_path
+            else:
+                out_path = f'{binary.SOM_path}.Stage_{count}'
+            
+            if count > 0:
+                init = f"--init={inter_stages[-1]['path']}"
+            else:
+                init = '--init=zero'
 
-        if pink_avail:
-            subprocess.run(exec_str.split())
-            binary.SOM_hash = get_hash(binary.SOM_path)
-            binary.trained = True
-        else:
-            print('PINK can not be found on this system...')
+            exec_str  = f'Pink --train {binary.binary_path} {binary.SOM_path} '
+            exec_str += ' '.join(f'--{k}={v}' for k,v in self.pink_args.items())
+            exec_str += f' {init}'
+            exec_str += ' --dist-func ' + ' '.join(mode)
 
-    def train(self):
+            if pink_avail:
+                print(exec_str)
+                inter_stages.append({'path':out_path})
+                # subprocess.run(exec_str.split())
+                # binary.SOM_hash = get_hash(binary.SOM_path)
+                # binary.trained = True
+            else:
+                print(exec_str)
+
+    def train(self, **kwargs):
         '''Wrapper around the _train() method that will actual perform the training. Here
         we do the working to handle the case of multiple training binaries, whic is the case
         when the segments option is used. It should be fairly transparent to the calling 
         function. 
         '''
         for count, train in enumerate(self.binary):
-            self._train(binary=train)
+            self._train(binary=train, **kwargs)
             train.trained = True
 
         self.trained = True
