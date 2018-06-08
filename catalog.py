@@ -1802,9 +1802,9 @@ class Pink(Base):
             values = defaultdict(float)
             empty = 0
 
-    # Orignal methof using only the max label of each neuron
-    #         for key in book:
-    #             values[unique_labels[np.argmax(book[key])]] += prob[key] * max(book[key])
+            # Orignal methof using only the max label of each neuron
+            #         for key in book:
+            #             values[unique_labels[np.argmax(book[key])]] += prob[key] * max(book[key])
             
             # Poll all labels in each neuron
             for count, label in enumerate(unique_labels):
