@@ -931,7 +931,7 @@ class Pink(Base):
 
         self.trained = True
 
-    def retrieve_som_data(self, channel=0, count=0):
+    def retrieve_som_data(self, channel=0, count=0, iteration=None):
         '''If trained, this function will return the SOM data from some desired
         channel
 
@@ -941,6 +941,8 @@ class Pink(Base):
         count - int
              The trained binary from which to pull the SOM from. This is important
              if cross validation has been used
+        iteration - None or int
+             The intermidiate  SOM saved by PINK. If None, open the SOM in SOM_path
         '''
         binary = self._reterive_binary(count)
         
@@ -952,7 +954,14 @@ class Pink(Base):
             # print(f'{binary.SOM_path} hash not matching... Returning...')
             return None
 
-        with open(binary.SOM_path, 'rb') as som:
+        path = binary.SOM_path
+        if iteration is not None:
+            # Assume there is some type of extension for the file type
+            name, file_type = path.rsplit('.', 1)
+            path = f'{name}_{iteration}.{file_type}'
+            print(f'Path is {path}')
+
+        with open(path, 'rb') as som:
             # Unpack the header information
             numberOfChannels, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height = struct.unpack('i' * 6, som.read(4*6))
             SOM_size = np.prod([SOM_width, SOM_height, SOM_depth])
@@ -982,13 +991,15 @@ class Pink(Base):
 
             return (binary, data, SOM_width, SOM_height, SOM_depth, neuron_width, neuron_height)
 
-    def show_som(self, mode='train', channel=0, plt_mode='raw', color_map='bwr'):
+    def show_som(self, mode='train', channel=0, iteration=None, plt_mode='raw', color_map='bwr'):
         '''Method to plot the trained SOM, and associated plotting options
 
         mode - str or int
              Type passed through to _reterive_binary()
         channel - int
              The channel from the SOM to plot. Defaults to the first (zero-index) channel
+        iteration - None or int
+             The intermidiate  SOM saved by PINK. If None, open the SOM in SOM_path
         plt_mode - str
              Mode to print the SOM on. 
              `split` - Slice the neurons into their own subplot axes objects from the returned data
@@ -1000,7 +1011,7 @@ class Pink(Base):
         '''
         import matplotlib as mpl
 
-        params = self.retrieve_som_data(channel=channel, count=mode)
+        params = self.retrieve_som_data(channel=channel, count=mode,iteration=iteration)
         if params is None:
             # print('Params is None... Returning...')
             return
