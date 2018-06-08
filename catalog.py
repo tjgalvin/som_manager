@@ -39,6 +39,11 @@ def get_hash(f, blocksize=56332):
     blocksize - int
           Number of bytes to read in at once to save memory
     '''
+    # Added this to allow dry run testing of the training learning
+    # modes parameter
+    if not os.path.exists(f):
+        return 'NO_EXISTING_FILE'
+
     sha1 = hashlib.sha1()
 
     with open(f, 'rb') as in_file:
@@ -930,17 +935,23 @@ class Pink(Base):
             else:
                 init = '--init=zero'
 
-            exec_str  = f'Pink --train {binary.binary_path} {binary.SOM_path} '
+            exec_str  = f'Pink --train {binary.binary_path} {out_path} '
             exec_str += ' '.join(f'--{k}={v}' for k,v in self.pink_args.items())
             exec_str += f' {init}'
             exec_str += ' --dist-func ' + ' '.join(mode)
 
             if pink_avail:
-                print(exec_str)
-                inter_stages.append({'path':out_path})
-                # subprocess.run(exec_str.split())
-                # binary.SOM_hash = get_hash(binary.SOM_path)
-                # binary.trained = True
+                print('\n', exec_str)
+                subprocess.run(exec_str.split())
+
+                info = {'path':out_path, 'hash':get_hash(out_path), 'exec_str':exec_str, 'learning':mode}
+                inter_stages.append(info)
+                print(info['hash'])
+                if count == len(learning) - 1:
+                    print('Attaching final SOM information')
+                    binary.SOM_hash = info['hash']
+                    binary.trained = True
+                    binary.inter_stages = inter_stages
             else:
                 print(exec_str)
 
