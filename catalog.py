@@ -967,7 +967,7 @@ class Pink(Base):
 
         self.trained = True
 
-    def retrieve_som_data(self, channel=0, count=0, iteration=None):
+    def retrieve_som_data(self, channel=0, count=0, iteration=None, stage=None):
         '''If trained, this function will return the SOM data from some desired
         channel
 
@@ -979,6 +979,9 @@ class Pink(Base):
              if cross validation has been used
         iteration - None or int
              The intermidiate  SOM saved by PINK. If None, open the SOM in SOM_path
+        stage - None or int
+             If we are attempting to get a SOM from an initial learning stage,
+             add this to the path of the file to open
         '''
         binary = self._reterive_binary(count)
         
@@ -991,6 +994,9 @@ class Pink(Base):
             return None
 
         path = binary.SOM_path
+        if stage is not None:
+            path = f'{path}.Stage_{stage}'
+            print(stage)
         if iteration is not None:
             # Assume there is some type of extension for the file type
             name, file_type = path.rsplit('.', 1)
