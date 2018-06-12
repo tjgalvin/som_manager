@@ -7,7 +7,9 @@ BINARY_OPTS = [{'fraction':0.7, 'norm':False, 'log10': False, 'sigma':False, 'co
 PINK_OPTS = [{'som-width':3, 'som-height':3, 'num-iter':1, 'inter-store':'keep', 'progress':0.05},
                 {'som-width':7, 'som-height':7, 'num-iter':1, 'inter-store':'keep', 'progress':0.05},
                 {'som-width':10, 'som-height':10, 'num-iter':1, 'inter-store':'keep', 'progress':0.05},
-                {'som-width':12, 'som-height':12, 'num-iter':1, 'inter-store':'keep', 'progress':0.05}]
+                {'som-width':13, 'som-height':13, 'num-iter':1, 'inter-store':'keep', 'progress':0.05},
+                {'som-width':16, 'som-height':16, 'num-iter':1, 'inter-store':'keep', 'progress':0.05},
+                {'som-width':19, 'som-height':19, 'num-iter':1, 'inter-store':'keep', 'progress':0.05}]
 
 LEARNING_MODES = [  [('gaussian','3.0','0.1'),
                      ('gaussian','1.4','0.05'),

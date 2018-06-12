@@ -35,10 +35,7 @@ def main():
         pink.map(mode='validate', SOM_mode='train')
         pink.save('trained.pink')
 
-    import sys
-    sys.exit()
-
-    pink_opts = {'som-width':10, 'som-height':10, 'num-iter':1, 'inter-store':'keep'}
+    pink_opts = {'som-width':15, 'som-height':15, 'num-iter':1, 'inter-store':'keep'}
     
     out_dir = f"{test_dir}/FIRST_{proj_dir}_{pink_opts['som-width']}x{pink_opts['som-height']}_20_iter"
     if not os.path.exists(f'{out_dir}/trained.pink'):
@@ -100,7 +97,7 @@ def main():
         pink.save('trained.pink')
 
 
-    pink_opts = {'som-width':10, 'som-height':10, 'num-iter':1, 'progress':0.05, 'inter-store':'keep'}
+    pink_opts = {'som-width':15, 'som-height':15, 'num-iter':1, 'progress':0.05, 'inter-store':'keep'}
     
     out_dir = f"{test_dir}/{proj_dir}_{pink_opts['som-width']}x{pink_opts['som-height']}_20_iter"
     if not os.path.exists(f'{out_dir}/trained.pink'):

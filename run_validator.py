@@ -6,22 +6,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from itertools import product
 from catalog import Source, Binary, Catalog, Pink
+from experiment_options import BINARY_OPTS, PINK_OPTS, LEARNING_MODES
 
 def FIRST_Fraction(CHANNELS=[['FIRST']],
-                   PROJECT_DIR = 'Script_Experiments_Fraction',
+                   PROJECT_DIR = 'Script_Experiments_Fraction_Learning',
                    TRIAL=0):
     REALISATIONS = 1000
-    BINARY_OPTS = [{'fraction':0.7, 'norm':False, 'log10': False, 'sigma':False, 'convex':False, 'project_dir':'NoNorm_NoLog_NoSig'},
-                   {'fraction':0.7, 'norm':True, 'log10': False, 'sigma':False, 'convex':False, 'project_dir':f'Norm_NoLog_NoSig'},
-                   {'fraction':0.7, 'norm':True, 'log10': False, 'sigma':3., 'convex':False, 'project_dir':f'Norm_NoLog_3'},
-                   {'fraction':0.7, 'norm':True, 'log10': [True,False], 'sigma':3., 'convex':False, 'project_dir':f'Norm_Log_3'},
-                   {'fraction':0.7, 'norm':True, 'log10': [True, False], 'sigma':3., 'convex':True, 'project_dir':f'Norm_Log_3_Convex'}]
-
-    PINK_OPTS = [{'som-width':3, 'som-height':3, 'num-iter':10},
-                 {'som-width':7, 'som-height':7, 'num-iter':10},
-                 {'som-width':10, 'som-height':10, 'num-iter':10},
-                 {'som-width':12, 'som-height':12, 'num-iter':10}]
-
+    
     
     for bin_opts, pink_opts, channels in product(BINARY_OPTS, PINK_OPTS, CHANNELS):
         # print(bin_opts, pink_opts)
@@ -113,8 +104,7 @@ if __name__ == '__main__':
 
     batch1 = [i for i in range(0,10)]
     
-    SEGS_DIR = 'Script_Experiments_Segments_Trials'
-    FRAC_DIR = 'Script_Experiments_Fractions_Trials'
+    FRAC_DIR = 'Script_Experiments_Fractions_Trials_Learning'
     
     # ----------------------------------------------------------
     for i in batch1:
